@@ -1,0 +1,8 @@
+# 管理员登录密码（请及时修改为高强度密码）
+ADMIN_PASSWORD=admin123456
+
+# 会话签名安全密钥（生产环境请使用任意随机高强度字符串）
+SESSION_SECRET=cf-pastebin-super-secure-session-key-change-me
+
+# 环境标识
+ENVIRONMENT=development
