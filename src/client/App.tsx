@@ -3,6 +3,7 @@
  */
 
 import { Router, Route } from '@solidjs/router';
+import type { RouteSectionProps } from '@solidjs/router';
 import { Navbar } from './components/Navbar';
 import { ToastContainer } from './components/Toast';
 import { UploadPage } from './pages/UploadPage';
@@ -10,19 +11,17 @@ import { ShareViewPage } from './pages/ShareViewPage';
 import { AdminPage } from './pages/AdminPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 
-export function App() {
+/**
+ * 全局应用顶层布局组件
+ * 将 Navbar 与通用布局置于 Router 提供的上下文内，确保 <A> 及路由原语正常运作
+ */
+function RootLayout(props: RouteSectionProps) {
   return (
     <div class="min-h-screen flex flex-col bg-slate-50 bg-mesh-pattern text-slate-800">
       <Navbar />
 
       <main class="grow">
-        <Router>
-          <Route path="/" component={UploadPage} />
-          <Route path="/upload" component={UploadPage} />
-          <Route path="/s/:slug" component={ShareViewPage} />
-          <Route path="/admin" component={AdminPage} />
-          <Route path="*404" component={NotFoundPage} />
-        </Router>
+        {props.children}
       </main>
 
       {/* 极简清新页脚 */}
@@ -42,5 +41,17 @@ export function App() {
       {/* 全局消息提示容器 */}
       <ToastContainer />
     </div>
+  );
+}
+
+export function App() {
+  return (
+    <Router root={RootLayout}>
+      <Route path="/" component={UploadPage} />
+      <Route path="/upload" component={UploadPage} />
+      <Route path="/s/:slug" component={ShareViewPage} />
+      <Route path="/admin" component={AdminPage} />
+      <Route path="*404" component={NotFoundPage} />
+    </Router>
   );
 }
