@@ -437,4 +437,215 @@ describe('Worker Full API Integration Tests', () => {
     expect(row.status).toBe('used');
     expect(row.used_size_bytes).toBe(validTextBytes);
   });
+
+  it('should support burn-after-read for pure text: view once then burn on refresh (Defect 3)', async () => {
+    // 1. 创建纯文本阅后即焚分享
+    const createReq = new Request('http://localhost/api/upload/complete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: '纯文本绝密',
+        textContent: '绝密文本阅后即焚内容：ABC-999',
+        burnAfterRead: true,
+      }),
+    });
+    // 模拟无 cookie 匿名或管理员生成
+    sqlite.run(`
+      INSERT INTO upload_tokens (id, max_size_bytes, used_size_bytes, allow_permanent, status, expires_at, created_at)
+      VALUES ('text-burn-token', 1024 * 1024, 0, 0, 'active', datetime('now', '+1 hour'), datetime('now'));
+    `);
+    const createTokenReq = new Request('http://localhost/api/upload/complete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token: 'text-burn-token',
+        title: '纯文本绝密',
+        textContent: '绝密文本阅后即焚内容：ABC-999',
+        burnAfterRead: true,
+      }),
+    });
+    const createRes = await worker.fetch(createTokenReq, env, executionContext);
+    const { data: { slug } } = await createRes.json();
+
+    // 2. 首次通过公共落地页接口读取文本：必须成功返回文本
+    const view1Req = new Request(`http://localhost/api/paste/${slug}`);
+    const view1Res = await worker.fetch(view1Req, env, executionContext);
+    expect(view1Res.status).toBe(200);
+    const view1Data = await view1Res.json();
+    expect(view1Data.success).toBe(true);
+    expect(view1Data.data.textContent).toBe('绝密文本阅后即焚内容：ABC-999');
+    expect(view1Data.data.burnAfterRead).toBe(true);
+    // 响应头应强制不缓存
+    expect(view1Res.headers.get('cache-control')).toContain('no-store');
+
+    // 3. 用户在浏览器按 F5 刷新或他人二次打开：必须已被焚毁 (404)
+    const view2Req = new Request(`http://localhost/api/paste/${slug}`);
+    const view2Res = await worker.fetch(view2Req, env, executionContext);
+    expect(view2Res.status).toBe(404);
+  });
+
+  it('should support burn-after-read for files: open page allows download via readToken, then burned on refresh/second access', async () => {
+    // 1. 上传一个阅后即焚文件
+    const mockFileBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]); // PNG Header
+    mockR2Storage.set('files/burn-file-uuid/secret.png', mockFileBytes);
+
+    sqlite.run(`
+      INSERT INTO upload_tokens (id, max_size_bytes, used_size_bytes, allow_permanent, status, expires_at, created_at)
+      VALUES ('file-burn-token', 1024 * 1024, 0, 0, 'active', datetime('now', '+1 hour'), datetime('now'));
+    `);
+
+    const completeReq = new Request('http://localhost/api/upload/complete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token: 'file-burn-token',
+        title: '绝密图片',
+        files: [{
+          r2Key: 'files/burn-file-uuid/secret.png',
+          filename: 'secret.png',
+          mimeType: 'image/png',
+          sizeBytes: 4,
+        }],
+        burnAfterRead: true,
+      }),
+    });
+    const completeRes = await worker.fetch(completeReq, env, executionContext);
+    const { data: { slug } } = await completeRes.json();
+
+    // 2. 访客首次打开 /s/:slug 获取落地页数据
+    const landingReq = new Request(`http://localhost/api/paste/${slug}`);
+    const landingRes = await worker.fetch(landingReq, env, executionContext);
+    expect(landingRes.status).toBe(200);
+    const landingData = await landingRes.json();
+    expect(landingData.data.files).toHaveLength(1);
+
+    const downloadUrl = landingData.data.files[0].downloadUrl;
+    expect(downloadUrl).toContain('read_token=');
+
+    // 3. 用户在同一个打开的页面上点击下载该文件：凭携带的 read_token 必须成功下载！
+    const downloadReq = new Request(`http://localhost${downloadUrl}`);
+    const downloadRes = await worker.fetch(downloadReq, env, executionContext);
+    expect(downloadRes.status).toBe(200);
+    expect(downloadRes.headers.get('content-type')).toBe('image/png');
+
+    // 4. 再次刷新落地页：已焚毁 (404)
+    const refreshReq = new Request(`http://localhost/api/paste/${slug}`);
+    const refreshRes = await worker.fetch(refreshReq, env, executionContext);
+    expect(refreshRes.status).toBe(404);
+
+    // 5. 再次下载该文件：已被彻底物理销毁 (404)
+    const downloadAgainReq = new Request(`http://localhost${downloadUrl}`);
+    const downloadAgainRes = await worker.fetch(downloadAgainReq, env, executionContext);
+    expect(downloadAgainRes.status).toBe(404);
+  });
+
+  it('should support Scheme B: admin preview does not count or burn, but public access counts & burns', async () => {
+    // 1. 管理员登录
+    const loginReq = new Request('http://localhost/api/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: 'testadminpassword' }),
+    });
+    const loginRes = await worker.fetch(loginReq, env, executionContext);
+    const sessionCookie = loginRes.headers.get('set-cookie')!.split(';')[0];
+
+    // 2. 管理员创建一个阅后即焚纯文本分享
+    const createReq = new Request('http://localhost/api/upload/complete', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: sessionCookie,
+      },
+      body: JSON.stringify({
+        title: '管理特权测试',
+        textContent: '管理员可见绝密',
+        burnAfterRead: true,
+      }),
+    });
+    const createRes = await worker.fetch(createReq, env, executionContext);
+    const { data: { slug } } = await createRes.json();
+
+    // 3. 管理员从后台点击“查阅”带 ?admin_preview=1 和 Cookie：不计入计数，不触发销毁
+    const adminPreviewReq = new Request(`http://localhost/api/paste/${slug}?admin_preview=1`, {
+      headers: { Cookie: sessionCookie },
+    });
+    const adminPreviewRes = await worker.fetch(adminPreviewReq, env, executionContext);
+    expect(adminPreviewRes.status).toBe(200);
+    const previewData = await adminPreviewRes.json();
+    expect(previewData.data.isAdminPreview).toBe(true);
+    expect(previewData.data.viewCount).toBe(0); // 浏览量未被增加
+
+    // 检查数据库：paste 未被软删除
+    const rowBefore = sqlite.query(`SELECT is_deleted, view_count, download_count FROM pastes WHERE slug = ?`).get(slug) as any;
+    expect(rowBefore.is_deleted).toBe(0);
+    expect(rowBefore.view_count).toBe(0);
+
+    // 4. 管理员或访客从公共短链访问 (无 admin_preview)：正常计入 view_count 并触发销毁
+    const publicReq = new Request(`http://localhost/api/paste/${slug}`, {
+      headers: { Cookie: sessionCookie }, // 即使携带管理员 Cookie，只要走公共链接也按普通访客真实自测
+    });
+    const publicRes = await worker.fetch(publicReq, env, executionContext);
+    expect(publicRes.status).toBe(200);
+    const publicData = await publicRes.json();
+    expect(publicData.data.isAdminPreview).toBe(false);
+
+    // 检查数据库：paste 已被标记软删除且 view_count 为 1
+    const rowAfter = sqlite.query(`SELECT is_deleted, view_count FROM pastes WHERE slug = ?`).get(slug) as any;
+    expect(rowAfter.is_deleted).toBe(1);
+    expect(rowAfter.view_count).toBe(1);
+
+    // 5. 二次访问公共短链：直接返回 404
+    const publicReq2 = new Request(`http://localhost/api/paste/${slug}`);
+    const publicRes2 = await worker.fetch(publicReq2, env, executionContext);
+    expect(publicRes2.status).toBe(404);
+  });
+
+  it('should accurately count public downloads on normal files even with admin session cookie', async () => {
+    // 1. 管理员登录
+    const loginReq = new Request('http://localhost/api/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: 'testadminpassword' }),
+    });
+    const loginRes = await worker.fetch(loginReq, env, executionContext);
+    const sessionCookie = loginRes.headers.get('set-cookie')!.split(';')[0];
+
+    // 2. 创建一个普通持久分享
+    mockR2Storage.set('files/normal-file-uuid/doc.txt', new TextEncoder().encode('Hello World Doc'));
+    const createReq = new Request('http://localhost/api/upload/complete', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: sessionCookie,
+      },
+      body: JSON.stringify({
+        title: '普通文件测试',
+        files: [{
+          r2Key: 'files/normal-file-uuid/doc.txt',
+          filename: 'doc.txt',
+          mimeType: 'text/plain',
+          sizeBytes: 15,
+        }],
+        burnAfterRead: false,
+      }),
+    });
+    const createRes = await worker.fetch(createReq, env, executionContext);
+    const { data: { slug } } = await createRes.json();
+
+    // 3. 第一次公共下载 (即使浏览器携带 Admin Cookie，也正常累加)
+    const dl1 = await worker.fetch(new Request(`http://localhost/d/${slug}`, {
+      headers: { Cookie: sessionCookie },
+    }), env, executionContext);
+    expect(dl1.status).toBe(200);
+
+    const check1 = sqlite.query(`SELECT download_count FROM pastes WHERE slug = ?`).get(slug) as any;
+    expect(check1.download_count).toBe(1);
+
+    // 4. 第二次公共下载
+    const dl2 = await worker.fetch(new Request(`http://localhost/d/${slug}`), env, executionContext);
+    expect(dl2.status).toBe(200);
+
+    const check2 = sqlite.query(`SELECT download_count FROM pastes WHERE slug = ?`).get(slug) as any;
+    expect(check2.download_count).toBe(2);
+  });
 });

@@ -89,6 +89,24 @@ export async function runCronCleanup(env: Env): Promise<{
     }
   }
 
+  // 1.1 查找已标记 is_deleted = 1 且仍残留 paste_files 的阅后即焚文件 (超过 15 分钟临时下载窗口未下载的)
+  const fifteenMinutesAgoIso = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  const orphanPastes = await DB.prepare(`
+    SELECT DISTINCT p.id
+    FROM pastes p
+    JOIN paste_files pf ON p.id = pf.paste_id
+    WHERE p.is_deleted = 1
+      AND p.created_at <= ?;
+  `).bind(fifteenMinutesAgoIso).all<{ id: string }>();
+
+  if (orphanPastes.results && orphanPastes.results.length > 0) {
+    for (const orphan of orphanPastes.results) {
+      const res = await deletePastePermanently(DB, R2, orphan.id);
+      expiredPastesCount++;
+      totalFreedBytes += res.deletedBytes;
+    }
+  }
+
   // 2. 更新超时未使用的 upload_tokens 为 expired 状态
   const tokenUpdateResult = await DB.prepare(`
     UPDATE upload_tokens

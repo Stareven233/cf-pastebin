@@ -138,10 +138,11 @@ export function apiCompleteUpload(payload: {
 }
 
 /**
- * 获取分享落地页数据
+ * 获取分享落地页数据 (支持携带 adminPreview 特权预览参数)
  */
-export function apiGetPaste(slug: string) {
-  return fetchJson<PublicPasteView>(`/api/paste/${encodeURIComponent(slug)}`);
+export function apiGetPaste(slug: string, adminPreview = false) {
+  const query = adminPreview ? '?admin_preview=1' : '';
+  return fetchJson<PublicPasteView>(`/api/paste/${encodeURIComponent(slug)}${query}`);
 }
 
 /**

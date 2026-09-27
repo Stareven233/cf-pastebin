@@ -175,3 +175,32 @@ export async function verifyAdminSession(request: Request, env: Env): Promise<bo
 export function createClearSessionCookie(): string {
   return `${ADMIN_COOKIE_NAME}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`;
 }
+
+/**
+ * 签发阅后即焚一次性临时读取/下载凭证 (15 分钟有效期)
+ * 允许用户在打开的落地页中下载文件或复制查看，但防止被二次刷新或盗链重放
+ */
+export async function signReadToken(pasteId: string, slug: string, secret: string): Promise<string> {
+  const payload = JSON.stringify({
+    type: 'burn_read',
+    pasteId,
+    slug,
+    exp: Date.now() + 15 * 60 * 1000, // 15 分钟有效期
+  });
+  return await signToken(payload, secret);
+}
+
+/**
+ * 校验阅后即焚临时读取凭证的合法性与时效
+ */
+export async function verifyReadToken(
+  token: string,
+  pasteId: string,
+  slug: string,
+  secret: string
+): Promise<boolean> {
+  const payload = await verifyToken(token, secret);
+  if (!payload) return false;
+  return payload.type === 'burn_read' && payload.pasteId === pasteId && payload.slug === slug;
+}
+

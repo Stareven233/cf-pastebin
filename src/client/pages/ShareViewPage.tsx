@@ -19,10 +19,13 @@ export function ShareViewPage() {
   const [errorMsg, setErrorMsg] = createSignal<string | null>(null);
   const [errorCode, setErrorCode] = createSignal<string | null>(null);
 
+  const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+  const isAdminPreview = searchParams.get('admin_preview') === '1';
+
   const loadData = async () => {
     setLoading(true);
     setErrorMsg(null);
-    const res = await apiGetPaste(params.slug);
+    const res = await apiGetPaste(params.slug, isAdminPreview);
     setLoading(false);
 
     if (res.success && res.data) {
@@ -82,8 +85,26 @@ export function ShareViewPage() {
       {/* 正常内容呈现 */}
       <Show when={!loading() && data()}>
         <div class="space-y-6">
-          {/* 阅后即焚警告横幅 (暖橙色醒目提醒) */}
-          <Show when={data()!.burnAfterRead}>
+          {/* 管理员特权预览提示横幅 (方案B) */}
+          <Show when={data()!.isAdminPreview}>
+            <div class="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-indigo-200 rounded-2xl p-4 sm:p-5 flex items-center gap-3.5 text-indigo-950 shadow-xs">
+              <div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md">
+                <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+              </div>
+              <div>
+                <h4 class="text-sm font-bold">管理员免焚毁特权预览</h4>
+                <p class="text-xs text-indigo-800 mt-0.5">
+                  主人，此查阅来自后台特权通道，不会增加访问/下载计数，也不会触发阅后即焚物理销毁喵~
+                </p>
+              </div>
+            </div>
+          </Show>
+
+          {/* 阅后即焚警告横幅 (暖橙色醒目提醒，非管理员预览时) */}
+          <Show when={data()!.burnAfterRead && !data()!.isAdminPreview}>
             <div class="bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-accent-300 rounded-2xl p-4 sm:p-5 flex items-center gap-3.5 text-accent-950 shadow-sm animate-pulse">
               <div class="w-10 h-10 rounded-xl bg-accent-500 text-white flex items-center justify-center shrink-0 shadow-md">
                 <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -91,9 +112,9 @@ export function ShareViewPage() {
                 </svg>
               </div>
               <div>
-                <h4 class="text-sm font-bold">阅后即焚模式已激活</h4>
+                <h4 class="text-sm font-bold">🔥 阅后即焚模式已激活</h4>
                 <p class="text-xs text-accent-800 mt-0.5">
-                  提示：本内容仅允许下载 1 次！访客触发实际下载后，文件将被立即从服务器物理永久销毁喵！
+                  提示：分享内容已成功提取！当前页面可直接复制与下载，页面关闭、刷新或二次打开将立即彻底销毁喵！
                 </p>
               </div>
             </div>
@@ -134,7 +155,7 @@ export function ShareViewPage() {
             <div>
               <TextPreview
                 content={data()!.textContent!}
-                rawUrl={`/d/${data()!.slug}?raw=1`}
+                rawUrl={data()!.rawUrl || `/d/${data()!.slug}?raw=1`}
                 title={data()!.title || '纯文本分享'}
               />
             </div>

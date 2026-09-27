@@ -16,6 +16,19 @@ export function TextPreview(props: TextPreviewProps) {
   const [wrapLines, setWrapLines] = createSignal(true);
   const lines = () => (props.content || '').split('\n');
 
+  const handleDownload = () => {
+    const blob = new Blob([props.content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${props.title || 'paste'}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('文本已成功下载喵！', 'success');
+  };
+
   const handleCopy = async () => {
     const success = await copyToClipboard(props.content);
     if (success) {
@@ -52,6 +65,18 @@ export function TextPreview(props: TextPreviewProps) {
             title="切换自动换行"
           >
             换行: {wrapLines() ? '开' : '关'}
+          </button>
+
+          {/* 下载文本文件 */}
+          <button
+            onClick={handleDownload}
+            class="flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
+            title="下载为 .txt 纯文本文件"
+          >
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            <span>下载</span>
           </button>
 
           {/* Raw 查看链接 */}

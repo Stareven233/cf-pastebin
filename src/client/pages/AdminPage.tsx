@@ -704,12 +704,23 @@ export function AdminPage() {
                           </td>
                           <td class="p-3 text-right space-x-1.5 shrink-0">
                             <a
-                              href={`/s/${item.slug}`}
+                              href={`/s/${item.slug}?admin_preview=1`}
                               target="_blank"
                               class="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 hover:bg-emerald-100 font-semibold"
+                              title="管理特权查阅：不计入浏览/下载统计，不触发阅后即焚"
                             >
                               查阅
                             </a>
+                            <button
+                              onClick={async () => {
+                                await copyToClipboard(`${window.location.origin}/s/${item.slug}`);
+                                showToast('公共分享链接已复制喵！', 'success');
+                              }}
+                              class="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 font-semibold"
+                              title="复制标准公共分享链接 (可测试真实访问统计与阅后即焚)"
+                            >
+                              复制
+                            </button>
                             <button
                               onClick={() => handleDeletePaste(item.id, item.slug)}
                               class="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 font-semibold"

@@ -105,6 +105,8 @@ export interface PublicPasteView {
   expiresAt: string | null;
   createdAt: string;
   isExpired: boolean;
+  rawUrl?: string;
+  isAdminPreview?: boolean;
 }
 
 // 管理员视图下的分享列表项

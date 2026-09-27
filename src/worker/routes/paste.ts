@@ -4,12 +4,13 @@
 
 import { isCircuitBroken } from '../metrics';
 import { deletePastePermanently } from '../cron';
-import { verifyAdminSession } from '../auth';
+import { verifyAdminSession, signReadToken } from '../auth';
 import type { Env } from '../db';
 import type { ApiResponse, PublicPasteView } from '../../shared/types';
 
 /**
  * 获取分享落地页数据 (支持文本高亮、音频在线播放与文件信息)
+ * 支持方案B：管理后台带 ?admin_preview=1 时不触发计数与销毁；公共访问正常计数并在阅后即焚时销毁
  */
 export async function handleGetPaste(
   request: Request,
@@ -17,10 +18,13 @@ export async function handleGetPaste(
   slug: string,
   ctx?: ExecutionContext
 ): Promise<Response> {
+  const url = new URL(request.url);
+  const isAdminPreview = url.searchParams.get('admin_preview') === '1';
   const isAdmin = await verifyAdminSession(request, env);
+  const isAuthorizedAdminPreview = isAdmin && isAdminPreview;
 
-  // 1. 非管理员访问时，进行 95% 熔断拦截检测
-  if (!isAdmin) {
+  // 1. 非管理员特权预览时，进行 95% 熔断拦截检测
+  if (!isAuthorizedAdminPreview) {
     const circuit = await isCircuitBroken(env.DB);
     if (circuit.broken) {
       return Response.json({
@@ -58,7 +62,7 @@ export async function handleGetPaste(
     return Response.json({
       success: false,
       code: 'NOT_FOUND',
-      error: '该分享链接不存在或已被删除'
+      error: '该分享链接不存在、已被阅后即焚销毁或已过期'
     } satisfies ApiResponse, { status: 404 });
   }
 
@@ -91,26 +95,66 @@ export async function handleGetPaste(
     size_bytes: number;
   }>();
 
-  // 5. 累加落地页浏览次数 (非管理员访问时)
-  if (!isAdmin) {
+  const fileCount = filesRows.results?.length || 0;
+
+  // 5. 阅后即焚凭证签发 (若为阅后即焚且非管理员特权预览，签发 15 分钟临时下载凭据)
+  const secret = env.SESSION_SECRET || 'cf-pastebin-default-secret-change-in-prod';
+  let readToken: string | null = null;
+  if (paste.burn_after_read === 1 && !isAuthorizedAdminPreview) {
+    readToken = await signReadToken(paste.id, paste.slug, secret);
+  }
+
+  // 6. 累加浏览次数与阅后即焚标记 (方案B：非特权预览时正常计数并销毁)
+  if (!isAuthorizedAdminPreview) {
     await env.DB.prepare(`
       UPDATE pastes SET view_count = view_count + 1 WHERE id = ?;
     `).bind(paste.id).run();
+
+    if (paste.burn_after_read === 1) {
+      // 立即标记软删除：确保页面刷新或二次打开立即返回 404 (阅后即焚)
+      await env.DB.prepare(`
+        UPDATE pastes SET is_deleted = 1 WHERE id = ?;
+      `).bind(paste.id).run();
+
+      // 若为纯文本且无任何关联文件，直接在后台排队彻底物理销毁
+      if (paste.type === 'text' || fileCount === 0) {
+        if (ctx) {
+          ctx.waitUntil(deletePastePermanently(env.DB, env.R2, paste.id));
+        } else {
+          await deletePastePermanently(env.DB, env.R2, paste.id);
+        }
+      }
+    }
   }
 
+  // 7. 组装文件下载与流媒体链接 (带上 read_token 或 admin_preview 授权标记)
   const files = (filesRows.results || []).map(f => {
     const isAudio = f.mime_type.startsWith('audio/') ||
       /\.(mp3|wav|ogg|flac|m4a|aac|opus|webm)$/i.test(f.filename);
+
+    let downloadUrl = `/d/${paste.slug}/${f.id}`;
+    if (isAuthorizedAdminPreview) {
+      downloadUrl += '?admin_preview=1';
+    } else if (readToken) {
+      downloadUrl += `?read_token=${encodeURIComponent(readToken)}`;
+    }
 
     return {
       id: f.id,
       filename: f.filename,
       mimeType: f.mime_type,
       sizeBytes: f.size_bytes,
-      downloadUrl: `/d/${paste.slug}/${f.id}`,
+      downloadUrl,
       isAudio,
     };
   });
+
+  let rawUrl = `/d/${paste.slug}?raw=1`;
+  if (isAuthorizedAdminPreview) {
+    rawUrl += '&admin_preview=1';
+  } else if (readToken) {
+    rawUrl += `&read_token=${encodeURIComponent(readToken)}`;
+  }
 
   const viewData: PublicPasteView = {
     id: paste.id,
@@ -121,15 +165,24 @@ export async function handleGetPaste(
     files,
     totalSizeBytes: paste.total_size_bytes,
     burnAfterRead: paste.burn_after_read === 1,
-    viewCount: paste.view_count + (isAdmin ? 0 : 1),
+    viewCount: paste.view_count + (isAuthorizedAdminPreview ? 0 : 1),
     downloadCount: paste.download_count,
     expiresAt: paste.expires_at,
     createdAt: paste.created_at,
     isExpired: false,
+    rawUrl,
+    isAdminPreview: isAuthorizedAdminPreview,
   };
+
+  const responseHeaders: Record<string, string> = {};
+  if (paste.burn_after_read === 1) {
+    responseHeaders['Cache-Control'] = 'no-store, no-cache, must-revalidate';
+  }
 
   return Response.json({
     success: true,
     data: viewData,
-  } satisfies ApiResponse<PublicPasteView>);
+  } satisfies ApiResponse<PublicPasteView>, {
+    headers: responseHeaders,
+  });
 }
