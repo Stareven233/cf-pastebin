@@ -648,4 +648,72 @@ describe('Worker Full API Integration Tests', () => {
     const check2 = sqlite.query(`SELECT download_count FROM pastes WHERE slug = ?`).get(slug) as any;
     expect(check2.download_count).toBe(2);
   });
+
+  it('should allow admin direct upload up to 100MB and reject exceeding 100MB, while guest stays capped at 25MB (Defect 1)', async () => {
+    // 1. 管理员登录
+    const loginReq = new Request('http://localhost/api/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: 'testadminpassword' }),
+    });
+    const loginRes = await worker.fetch(loginReq, env, executionContext);
+    const sessionCookie = loginRes.headers.get('set-cookie')!.split(';')[0];
+
+    // 2. 管理员上传 35MB 文件 (超过 25MB 但在 100MB 内) -> 应当成功
+    const adminFileSize = 35 * 1024 * 1024;
+    const adminUploadReq = new Request(`http://localhost/api/upload/direct?filename=big_package.zip&size=${adminFileSize}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/zip',
+        Cookie: sessionCookie,
+      },
+      body: new Uint8Array([0x50, 0x4B, 0x03, 0x04]),
+    });
+    const adminUploadRes = await worker.fetch(adminUploadReq, env, executionContext);
+    expect(adminUploadRes.status).toBe(200);
+    const adminUploadJson = await adminUploadRes.json();
+    expect(adminUploadJson.success).toBe(true);
+    expect(adminUploadJson.data.sizeBytes).toBe(adminFileSize);
+
+    // 3. 管理员上传超过 100MB 的文件 (例如 105MB) -> 应当返回 400 并明确提示
+    const adminExceedSize = 105 * 1024 * 1024;
+    const exceedReq = new Request(`http://localhost/api/upload/direct?filename=too_big.zip&size=${adminExceedSize}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/zip',
+        Cookie: sessionCookie,
+      },
+      body: new Uint8Array([0x50, 0x4B, 0x03, 0x04]),
+    });
+    const exceedRes = await worker.fetch(exceedReq, env, executionContext);
+    expect(exceedRes.status).toBe(400);
+    const exceedJson = await exceedRes.json();
+    expect(exceedJson.error).toContain('100MB');
+
+    // 4. 普通访客生成 50MB 配额的 Token，尝试单文件直传 30MB (> 25MB) -> 应当被单文件 25MB 限制拦截
+    const createTokenReq = new Request('http://localhost/api/admin/tokens', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: sessionCookie,
+      },
+      body: JSON.stringify({
+        maxSizeBytes: 50 * 1024 * 1024,
+      }),
+    });
+    const createTokenRes = await worker.fetch(createTokenReq, env, executionContext);
+    const { data: { tokenId } } = await createTokenRes.json();
+
+    const guestFileSize = 30 * 1024 * 1024;
+    const guestUploadReq = new Request(`http://localhost/api/upload/direct?filename=song.flac&size=${guestFileSize}&token=${tokenId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'audio/flac' },
+      body: new Uint8Array([0x66, 0x4C, 0x61, 0x43]),
+    });
+    const guestUploadRes = await worker.fetch(guestUploadReq, env, executionContext);
+    expect(guestUploadRes.status).toBe(400);
+    const guestUploadJson = await guestUploadRes.json();
+    expect(guestUploadJson.error).toContain('25MB');
+  });
 });
+

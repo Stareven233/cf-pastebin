@@ -2,7 +2,7 @@
  * 文件与文本上传相关 API 路由处理
  */
 
-import { MAX_SINGLE_FILE_SIZE } from '../../shared/constants';
+import { MAX_SINGLE_FILE_SIZE, MAX_ADMIN_FILE_SIZE } from '../../shared/constants';
 import { isCircuitBroken, adjustStorageBytes, incrementMetric } from '../metrics';
 import { verifyAdminSession } from '../auth';
 import { generateUniqueSlug } from '../slug';
@@ -96,6 +96,7 @@ export async function handleDirectFileUpload(request: Request, env: Env): Promis
 
   // 2. 鉴权：优先 Token 消费模式（无论客户端是否已登录管理员，带 Token 均优先校验并核验配额）
   let tokenInfo: { id: string; max_size_bytes: number; used_size_bytes: number } | null = null;
+  let isAdmin = false;
 
   if (token) {
     const row = await env.DB.prepare(`
@@ -126,17 +127,19 @@ export async function handleDirectFileUpload(request: Request, env: Env): Promis
     tokenInfo = row;
   } else {
     // 未携带 Token 时，必须为合法管理员自用通道
-    const isAdmin = await verifyAdminSession(request, env);
+    isAdmin = await verifyAdminSession(request, env);
     if (!isAdmin) {
       return Response.json({ success: false, error: '无上传权限，缺少 Token 凭证' } satisfies ApiResponse, { status: 401 });
     }
   }
 
-  // 3. 单文件大小上限校验 (<= 25MB)
-  if (sizeParam > MAX_SINGLE_FILE_SIZE) {
+  // 3. 单文件大小上限校验 (缺陷 1 修复：管理员自用通道放宽至 100MB 物理极限，普通 Token 限制 25MB)
+  const maxAllowedSize = isAdmin ? MAX_ADMIN_FILE_SIZE : MAX_SINGLE_FILE_SIZE;
+  if (sizeParam > maxAllowedSize) {
+    const limitMb = isAdmin ? 100 : 25;
     return Response.json({
       success: false,
-      error: `单个文件大小不得超过 25MB (当前为 ${(sizeParam / (1024 * 1024)).toFixed(2)} MB)`
+      error: `单个文件大小不得超过 ${limitMb}MB (当前为 ${(sizeParam / (1024 * 1024)).toFixed(2)} MB)`
     } satisfies ApiResponse, { status: 400 });
   }
 

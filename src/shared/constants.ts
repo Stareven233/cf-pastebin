@@ -20,8 +20,11 @@ export const QUOTA_THRESHOLDS = {
   CRITICAL_RATIO: 0.95,  // 95%：前台停服熔断，管理端保持可用可清理
 } as const;
 
-// 单文件大小上限：25MB
+// 单文件大小上限：访客/Token 凭证通道为 25MB
 export const MAX_SINGLE_FILE_SIZE = 25 * 1024 * 1024;
+
+// 管理员自用通道单文件上限：100MB (Cloudflare Workers 原生 HTTP 直传物理极限)
+export const MAX_ADMIN_FILE_SIZE = 100 * 1024 * 1024;
 
 // Base62 字符集 (用于随机生成 4/8/16 位不可预测的短链 Slug)
 export const BASE62_CHARSET = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';

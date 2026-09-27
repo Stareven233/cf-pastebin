@@ -21,8 +21,18 @@ import {
 import { formatBytes, formatDateTime, formatRemainingTime, copyToClipboard } from '../utils/format';
 import { QuotaGauge } from '../components/QuotaGauge';
 import { showToast } from '../components/Toast';
-import { MAX_SINGLE_FILE_SIZE, EXPIRATION_PRESETS } from '../../shared/constants';
+import { MAX_SINGLE_FILE_SIZE, MAX_ADMIN_FILE_SIZE, EXPIRATION_PRESETS } from '../../shared/constants';
 import type { QuotaOverview, AdminPasteListItem, UploadToken } from '../../shared/types';
+
+// 管理员自用上传队列项类型
+interface AdminPendingFile {
+  id: string;
+  file: File;
+  name: string;
+  size: number;
+  progress: number;
+  status: 'pending' | 'uploading' | 'done' | 'error';
+}
 
 export function AdminPage() {
   // 认证状态
@@ -57,8 +67,9 @@ export function AdminPage() {
   const [createdTokenUrl, setCreatedTokenUrl] = createSignal<string | null>(null);
   const [isCreatingToken, setIsCreatingToken] = createSignal(false);
 
-  // 管理员自用上传面板状态
-  const [adminFiles, setAdminFiles] = createSignal<File[]>([]);
+  // 管理员自用上传面板状态 (缺陷 1 升级：支持多文件追加、拖拽、单项删除与进度追踪)
+  const [adminFiles, setAdminFiles] = createSignal<AdminPendingFile[]>([]);
+  const [adminTitle, setAdminTitle] = createSignal('');
   const [adminText, setAdminText] = createSignal('');
   const [adminSlugLen, setAdminSlugLen] = createSignal<4 | 8 | 16>(4);
   const [adminDuration, setAdminDuration] = createSignal(86400);
@@ -66,7 +77,17 @@ export function AdminPage() {
   const [adminBurn, setAdminBurn] = createSignal(false);
   const [isAdminUploading, setIsAdminUploading] = createSignal(false);
   const [adminUploadProgress, setAdminUploadProgress] = createSignal(0);
-  const [adminCreatedSlug, setAdminCreatedSlug] = createSignal<string | null>(null);
+  const [adminCurrentStepText, setAdminCurrentStepText] = createSignal('');
+  const [adminCreatedResult, setAdminCreatedResult] = createSignal<{
+    slug: string;
+    shareUrl: string;
+    directUrl: string;
+  } | null>(null);
+
+  // 计算管理员待上传文件的总字节大小
+  const adminTotalFilesSizeBytes = createMemo(() => {
+    return adminFiles().reduce((acc, cur) => acc + cur.size, 0);
+  });
 
   // 检查管理员身份
   const checkAuth = async () => {
@@ -188,12 +209,44 @@ export function AdminPage() {
   };
 
   // 存储重新校准
+  // 存储重新校准
   const handleRecalibrate = async () => {
     const res = await apiAdminRecalibrate();
     if (res.success) {
       showToast(res.message || '校准完成喵', 'success');
       loadDashboard();
     }
+  };
+
+  // 管理员自用上传：处理多文件追加与拖拽 (支持单文件最高 100MB 物理极限)
+  const handleAdminAddFiles = (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return;
+
+    const newItems: AdminPendingFile[] = [];
+    for (let i = 0; i < fileList.length; i++) {
+      const file = fileList[i];
+      // 单文件上限：100MB (Cloudflare Workers 原生 HTTP 直传物理上限)
+      if (file.size > MAX_ADMIN_FILE_SIZE) {
+        showToast(`文件 "${file.name}" 大小超过 100MB 上限，已跳过喵`, 'warning');
+        continue;
+      }
+      newItems.push({
+        id: Math.random().toString(36).substring(2, 9),
+        file,
+        name: file.name,
+        size: file.size,
+        progress: 0,
+        status: 'pending',
+      });
+    }
+
+    setAdminFiles(prev => [...prev, ...newItems]);
+  };
+
+  // 管理员自用上传：单项删除待上传文件
+  const handleAdminRemoveFile = (id: string) => {
+    if (isAdminUploading()) return;
+    setAdminFiles(prev => prev.filter(f => f.id !== id));
   };
 
   // 管理员自用上传提交
@@ -208,29 +261,37 @@ export function AdminPage() {
 
     setIsAdminUploading(true);
     setAdminUploadProgress(0);
-    setAdminCreatedSlug(null);
+    setAdminCreatedResult(null);
 
     try {
       const uploadedResults: Array<{ r2Key: string; filename: string; mimeType: string; sizeBytes: number }> = [];
 
       for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const res = await uploadFileWithProgress(file, undefined, (percent) => {
+        const item = files[i];
+        setAdminCurrentStepText(`正在上传 (${i + 1}/${files.length}): ${item.name}`);
+        setAdminFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: 'uploading' } : f));
+
+        const res = await uploadFileWithProgress(item.file, undefined, (percent) => {
+          setAdminFiles(prev => prev.map(f => f.id === item.id ? { ...f, progress: percent } : f));
           const overall = Math.round(((i + percent / 100) / (files.length || 1)) * 90);
           setAdminUploadProgress(overall);
         });
+
         uploadedResults.push({
           r2Key: res.r2Key,
           filename: res.filename,
           mimeType: res.mimeType,
           sizeBytes: res.sizeBytes,
         });
+
+        setAdminFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: 'done', progress: 100 } : f));
       }
 
+      setAdminCurrentStepText('正在生成专属分享链接...');
       setAdminUploadProgress(95);
 
       const completeRes = await apiCompleteUpload({
-        title: files.length > 0 ? files[0].name : '管理员自用分享',
+        title: adminTitle().trim() || (files.length > 0 ? files[0].name : '管理员自用分享'),
         textContent: text || undefined,
         files: uploadedResults,
         slugLength: adminSlugLen(),
@@ -244,9 +305,14 @@ export function AdminPage() {
       }
 
       setAdminUploadProgress(100);
-      setAdminCreatedSlug(completeRes.data.slug);
+      setAdminCreatedResult({
+        slug: completeRes.data.slug,
+        shareUrl: completeRes.data.shareUrl,
+        directUrl: completeRes.data.directUrl,
+      });
       showToast('自用分享创建成功喵！短链已生成', 'success');
       setAdminFiles([]);
+      setAdminTitle('');
       setAdminText('');
       loadPastes();
       loadDashboard();
@@ -481,42 +547,85 @@ export function AdminPage() {
                       <span>主人自用专属上传通道</span>
                     </h3>
                     <p class="text-xs text-slate-500 mt-0.5">
-                      无需任何 Token 凭证，单文件 25MB 内自由上传，自动生成唯一不冲突短链喵~
+                      无需任何 Token 凭证，单文件 100MB 内自由上传，支持多文件拖拽追加与多端自适应喵~
                     </p>
                   </div>
                   <span class="text-xs font-mono px-3 py-1 rounded-xl bg-accent-50 text-accent-800 border border-accent-200 font-semibold">
-                    Admin Access
+                    Admin Access (Max 100MB)
                   </span>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* 左侧：文件选择 */}
+                  {/* 左侧：文件拖拽上传区 */}
                   <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-2">添加音频/文件</label>
-                    <label class="flex flex-col items-center justify-center border-2 border-dashed border-emerald-300 rounded-2xl p-6 cursor-pointer bg-emerald-50/20 hover:bg-emerald-50/50 transition-colors">
+                    <div class="flex items-center justify-between mb-2">
+                      <label class="block text-xs font-bold text-slate-700">添加音频/文件 (单文件 ≤ 100MB)</label>
+                      <Show when={adminFiles().length > 0}>
+                        <span class="text-[11px] font-mono text-emerald-700 font-semibold">
+                          已选 {adminFiles().length} 个，共 {formatBytes(adminTotalFilesSizeBytes())}
+                        </span>
+                      </Show>
+                    </div>
+
+                    {/* 拖拽放置盒 */}
+                    <label
+                      class="relative flex flex-col items-center justify-center border-2 border-dashed border-emerald-300 rounded-2xl p-6 cursor-pointer bg-emerald-50/20 hover:bg-emerald-50/50 transition-colors group"
+                      ondragover={(e) => { e.preventDefault(); }}
+                      ondrop={(e) => {
+                        e.preventDefault();
+                        handleAdminAddFiles(e.dataTransfer?.files || null);
+                      }}
+                    >
                       <input
                         type="file"
                         multiple
+                        disabled={isAdminUploading()}
                         onChange={(e) => {
-                          if (e.currentTarget.files) {
-                            setAdminFiles(Array.from(e.currentTarget.files));
-                          }
+                          handleAdminAddFiles(e.currentTarget.files);
+                          e.currentTarget.value = '';
                         }}
                         class="sr-only"
                       />
-                      <svg class="w-8 h-8 text-emerald-600 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                      </svg>
-                      <span class="text-xs font-semibold text-slate-700">点击添加文件 (单文件 ≤ 25MB)</span>
+                      <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                        </svg>
+                      </div>
+                      <span class="text-xs font-semibold text-slate-700">点击选择或拖拽文件到此处</span>
+                      <span class="text-[11px] text-slate-400 mt-1">支持音频、文档、压缩包等，可多次追加选择</span>
                     </label>
 
+                    {/* 待上传文件清单 */}
                     <Show when={adminFiles().length > 0}>
-                      <div class="mt-3 space-y-1.5 max-h-36 overflow-y-auto">
+                      <div class="mt-3 space-y-1.5 max-h-48 overflow-y-auto">
                         <For each={adminFiles()}>
-                          {(f, idx) => (
-                            <div class="flex items-center justify-between p-2 rounded-lg bg-slate-50 text-xs">
-                              <span class="truncate font-medium text-slate-700">{f.name}</span>
-                              <span class="text-[10px] text-slate-400 font-mono shrink-0 ml-2">{formatBytes(f.size)}</span>
+                          {(item) => (
+                            <div class="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-xs">
+                              <div class="truncate mr-2 min-w-0">
+                                <p class="font-medium text-slate-800 truncate" title={item.name}>
+                                  {item.name}
+                                </p>
+                                <span class="text-[10px] text-slate-400 font-mono">
+                                  {formatBytes(item.size)}
+                                </span>
+                              </div>
+
+                              <div class="flex items-center gap-2 shrink-0">
+                                <Show when={item.status === 'uploading'}>
+                                  <span class="text-[10px] font-mono text-brand-600 font-bold">{item.progress}%</span>
+                                </Show>
+                                <Show when={item.status === 'done'}>
+                                  <span class="text-[10px] text-emerald-600 font-semibold">就绪</span>
+                                </Show>
+                                <button
+                                  onClick={() => handleAdminRemoveFile(item.id)}
+                                  disabled={isAdminUploading()}
+                                  class="text-slate-400 hover:text-rose-600 p-1 transition-colors"
+                                  title="移除"
+                                >
+                                  ×
+                                </button>
+                              </div>
                             </div>
                           )}
                         </For>
@@ -524,16 +633,34 @@ export function AdminPage() {
                     </Show>
                   </div>
 
-                  {/* 右侧：纯文本内容 */}
-                  <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-2">文本内容 (可选)</label>
-                    <textarea
-                      rows={5}
-                      placeholder="直接输入或粘贴文本内容..."
-                      value={adminText()}
-                      onInput={(e) => setAdminText(e.currentTarget.value)}
-                      class="w-full p-3 text-xs font-mono rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-brand-500/30 bg-slate-50/50 resize-none"
-                    />
+                  {/* 右侧：标题与纯文本内容 */}
+                  <div class="space-y-3">
+                    <div>
+                      <label class="block text-xs font-bold text-slate-700 mb-1.5">分享标题 (可选)</label>
+                      <input
+                        type="text"
+                        placeholder="留空则自动以首个文件名作为标题..."
+                        value={adminTitle()}
+                        onInput={(e) => setAdminTitle(e.currentTarget.value)}
+                        disabled={isAdminUploading()}
+                        class="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-brand-500/30 bg-slate-50/50"
+                      />
+                    </div>
+
+                    <div>
+                      <label class="block text-xs font-bold text-slate-700 mb-1.5">文本内容 (可选)</label>
+                      <textarea
+                        rows={5}
+                        placeholder="直接输入或粘贴文本内容..."
+                        value={adminText()}
+                        onInput={(e) => setAdminText(e.currentTarget.value)}
+                        disabled={isAdminUploading()}
+                        class="w-full p-3 text-xs font-mono rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-brand-500/30 bg-slate-50/50 resize-none"
+                      />
+                      <div class="mt-1 text-right text-[11px] text-slate-400 font-mono">
+                        {adminText().length} 个字符
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -544,6 +671,7 @@ export function AdminPage() {
                     <select
                       value={adminSlugLen()}
                       onChange={(e) => setAdminSlugLen(parseInt(e.currentTarget.value, 10) as any)}
+                      disabled={isAdminUploading()}
                       class="w-full py-2 px-3 rounded-xl border border-slate-200 bg-slate-50"
                     >
                       <option value={4}>4 位 (默认)</option>
@@ -564,12 +692,13 @@ export function AdminPage() {
                           setAdminDuration(val);
                         }
                       }}
+                      disabled={isAdminUploading()}
                       class="w-full py-2 px-3 rounded-xl border border-slate-200 bg-slate-50"
                     >
                       <option value={3600}>1 小时</option>
                       <option value={86400}>1 天 (默认)</option>
                       <option value={604800}>7 天</option>
-                      <option value={-1}>永久有效 (无过期)</option>
+                      <option value={-1}>永久有效 (管理员特权)</option>
                     </select>
                   </div>
 
@@ -579,6 +708,7 @@ export function AdminPage() {
                         type="checkbox"
                         checked={adminBurn()}
                         onChange={(e) => setAdminBurn(e.currentTarget.checked)}
+                        disabled={isAdminUploading()}
                         class="w-4 h-4 text-accent-600 rounded-sm focus:ring-accent-500 accent-accent-600"
                       />
                       <span class="font-medium text-slate-800">阅后即焚</span>
@@ -591,41 +721,93 @@ export function AdminPage() {
                       disabled={isAdminUploading() || (adminFiles().length === 0 && !adminText().trim())}
                       class="w-full py-2.5 px-4 rounded-xl bg-accent-600 hover:bg-accent-500 text-white font-bold text-xs shadow-md shadow-accent-600/20 transition-all disabled:opacity-50"
                     >
-                      {isAdminUploading() ? `上传中 ${adminUploadProgress()}%` : '发布自用分享'}
+                      {isAdminUploading() ? '发布中...' : '发布自用分享'}
                     </button>
                   </div>
                 </div>
 
+                {/* 上传进度条 */}
+                <Show when={isAdminUploading()}>
+                  <div class="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl">
+                    <div class="flex justify-between text-xs font-semibold text-emerald-800 mb-1.5">
+                      <span>{adminCurrentStepText()}</span>
+                      <span>{adminUploadProgress()}%</span>
+                    </div>
+                    <div class="w-full h-2 bg-emerald-200 rounded-full overflow-hidden">
+                      <div
+                        class="h-full bg-brand-600 transition-all duration-300"
+                        style={{ width: `${adminUploadProgress()}%` }}
+                      />
+                    </div>
+                  </div>
+                </Show>
+
                 {/* 发布成功结果直达 */}
-                <Show when={adminCreatedSlug()}>
-                  <div class="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center justify-between gap-4">
-                    <div class="flex items-center gap-3">
-                      <div class="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold">
-                        ✓
+                <Show when={adminCreatedResult()}>
+                  <div class="p-5 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-4">
+                    <div class="flex items-center justify-between">
+                      <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold">
+                          ✓
+                        </div>
+                        <div>
+                          <p class="text-xs font-bold text-emerald-900">自用分享发布成功喵！</p>
+                          <p class="text-xs text-emerald-700">短链已生成，您可以直接分享给好友或立即打开查看：</p>
+                        </div>
                       </div>
-                      <div>
-                        <p class="text-xs font-bold text-emerald-900">自用分享发布成功喵！</p>
-                        <p class="text-xs font-mono text-emerald-700">
-                          {window.location.origin}/s/{adminCreatedSlug()}
-                        </p>
+                      <button
+                        onClick={() => setAdminCreatedResult(null)}
+                        class="text-xs text-slate-400 hover:text-slate-600"
+                      >
+                        ✕ 关闭
+                      </button>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <div class="p-2.5 bg-white rounded-xl border border-emerald-200 flex items-center justify-between gap-2">
+                        <div class="truncate min-w-0">
+                          <span class="text-[10px] text-slate-400 block">落地页链接</span>
+                          <span class="font-mono text-emerald-800 truncate block">
+                            {window.location.origin}{adminCreatedResult()!.shareUrl}
+                          </span>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            await copyToClipboard(`${window.location.origin}${adminCreatedResult()!.shareUrl}`);
+                            showToast('落地页链接已复制喵！', 'success');
+                          }}
+                          class="px-2.5 py-1 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-800 text-[11px] font-semibold shrink-0"
+                        >
+                          复制
+                        </button>
+                      </div>
+
+                      <div class="p-2.5 bg-white rounded-xl border border-emerald-200 flex items-center justify-between gap-2">
+                        <div class="truncate min-w-0">
+                          <span class="text-[10px] text-slate-400 block">直链 Direct URL</span>
+                          <span class="font-mono text-emerald-800 truncate block">
+                            {window.location.origin}{adminCreatedResult()!.directUrl}
+                          </span>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            await copyToClipboard(`${window.location.origin}${adminCreatedResult()!.directUrl}`);
+                            showToast('直链已复制喵！', 'success');
+                          }}
+                          class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] font-semibold shrink-0"
+                        >
+                          复制
+                        </button>
                       </div>
                     </div>
-                    <div class="flex items-center gap-2">
-                      <button
-                        onClick={async () => {
-                          await copyToClipboard(`${window.location.origin}/s/${adminCreatedSlug()}`);
-                          showToast('链接已复制喵！', 'success');
-                        }}
-                        class="px-3 py-1.5 rounded-lg bg-white border border-emerald-300 text-emerald-800 text-xs font-semibold"
-                      >
-                        复制链接
-                      </button>
+
+                    <div class="flex justify-end gap-2 pt-1">
                       <a
-                        href={`/s/${adminCreatedSlug()}`}
+                        href={adminCreatedResult()!.shareUrl}
                         target="_blank"
-                        class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold"
+                        class="px-4 py-2 rounded-xl bg-accent-600 hover:bg-accent-500 text-white text-xs font-semibold shadow-xs"
                       >
-                        打开查看 →
+                        立即打开落地页 →
                       </a>
                     </div>
                   </div>
