@@ -154,7 +154,16 @@ export async function handleDownloadFile(
   const headers = new Headers();
   r2Object.writeHttpMetadata(headers);
   if (fileRecord.mime_type) {
-    headers.set('Content-Type', fileRecord.mime_type);
+    let contentType = fileRecord.mime_type;
+    // 若为内联预览且属于纯文本/代码，确保携带 UTF-8 编码，避免中文注释乱码
+    if (isInline && (contentType === 'application/octet-stream' || contentType.startsWith('text/') || contentType.includes('javascript') || contentType.includes('json'))) {
+      if (!contentType.includes('charset')) {
+        contentType = `${contentType}; charset=utf-8`;
+      }
+    }
+    headers.set('Content-Type', contentType);
+  } else if (isInline) {
+    headers.set('Content-Type', 'text/plain; charset=utf-8');
   }
   headers.set('etag', r2Object.httpEtag);
   headers.set('Content-Length', String(fileRecord.size_bytes));

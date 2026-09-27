@@ -715,5 +715,73 @@ describe('Worker Full API Integration Tests', () => {
     const guestUploadJson = await guestUploadRes.json();
     expect(guestUploadJson.error).toContain('25MB');
   });
+
+  it('should support inline code file streaming with correct UTF-8 headers (Defect 5)', async () => {
+    // 1. 管理员登录
+    const loginReq = new Request('http://localhost/api/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: 'testadminpassword' }),
+    });
+    const loginRes = await worker.fetch(loginReq, env, executionContext);
+    const sessionCookie = loginRes.headers.get('set-cookie')!.split(';')[0];
+
+    // 2. 直传一个 JavaScript 代码文件
+    const codeSnippet = '// 喵~ 计算求和函数\nexport function add(a, b) {\n  return a + b;\n}';
+    const codeBytes = new TextEncoder().encode(codeSnippet);
+    const uploadReq = new Request(`http://localhost/api/upload/direct?filename=calc.js&size=${codeBytes.length}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/javascript',
+        Cookie: sessionCookie,
+      },
+      body: codeBytes,
+    });
+    const uploadRes = await worker.fetch(uploadReq, env, executionContext);
+    expect(uploadRes.status).toBe(200);
+    const uploadData = await uploadRes.json();
+    const r2Key = uploadData.data.r2Key;
+
+    // 3. 完成上传
+    const completeReq = new Request('http://localhost/api/upload/complete', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: sessionCookie,
+      },
+      body: JSON.stringify({
+        title: '代码预览测试',
+        files: [{
+          r2Key,
+          filename: 'calc.js',
+          mimeType: 'application/javascript',
+          sizeBytes: codeBytes.length,
+        }],
+      }),
+    });
+    const completeRes = await worker.fetch(completeReq, env, executionContext);
+    expect(completeRes.status).toBe(200);
+    const { data: { slug } } = await completeRes.json();
+
+    // 4. 获取落地页详情，得到包含的 fileId
+    const getPasteRes = await worker.fetch(new Request(`http://localhost/api/paste/${slug}`), env, executionContext);
+    expect(getPasteRes.status).toBe(200);
+    const pasteJson = await getPasteRes.json();
+    const fileId = pasteJson.data.files[0].id;
+
+    // 5. 请求 inline 预览流：/d/:slug/:fileId?inline=1
+    const inlineReq = new Request(`http://localhost/d/${slug}/${fileId}?inline=1`);
+    const inlineRes = await worker.fetch(inlineReq, env, executionContext);
+    expect(inlineRes.status).toBe(200);
+
+    // 验证响应头
+    expect(inlineRes.headers.get('content-disposition')).toContain('inline');
+    expect(inlineRes.headers.get('content-type')).toContain('charset=utf-8');
+
+    // 验证内容读取正常
+    const responseText = await inlineRes.text();
+    expect(responseText).toBe(codeSnippet);
+  });
 });
+
 

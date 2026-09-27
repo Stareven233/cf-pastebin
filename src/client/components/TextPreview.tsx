@@ -10,6 +10,9 @@ export interface TextPreviewProps {
   content: string;
   rawUrl?: string;
   title?: string;
+  language?: string;
+  maxHeightClass?: string;
+  onDownload?: () => void;
 }
 
 export function TextPreview(props: TextPreviewProps) {
@@ -17,22 +20,26 @@ export function TextPreview(props: TextPreviewProps) {
   const lines = () => (props.content || '').split('\n');
 
   const handleDownload = () => {
+    if (props.onDownload) {
+      props.onDownload();
+      return;
+    }
     const blob = new Blob([props.content], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${props.title || 'paste'}.txt`;
+    a.download = props.title || 'paste.txt';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    showToast('文本已成功下载喵！', 'success');
+    showToast('文件已成功下载喵！', 'success');
   };
 
   const handleCopy = async () => {
     const success = await copyToClipboard(props.content);
     if (success) {
-      showToast('文本内容已成功复制到剪贴板喵！', 'success');
+      showToast('内容已成功复制到剪贴板喵！', 'success');
     } else {
       showToast('复制失败，请手动选择复制', 'error');
     }
@@ -40,20 +47,25 @@ export function TextPreview(props: TextPreviewProps) {
 
   return (
     <div class="w-full bg-slate-900 rounded-2xl border border-slate-800 shadow-xl overflow-hidden transition-all">
-      {/* 顶部操作工具栏 */}
-      <div class="flex items-center justify-between px-4 py-3 bg-slate-950/70 border-b border-slate-800/80 text-xs">
-        <div class="flex items-center gap-3">
-          <div class="flex gap-1.5">
+      {/* 顶部操作工具栏：移动端响应式分层与紧凑布局 */}
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between px-4 py-3 bg-slate-950/70 border-b border-slate-800/80 text-xs gap-2.5">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="flex gap-1.5 shrink-0">
             <div class="w-3 h-3 rounded-full bg-rose-500/80" />
             <div class="w-3 h-3 rounded-full bg-amber-500/80" />
             <div class="w-3 h-3 rounded-full bg-emerald-500/80" />
           </div>
-          <span class="text-slate-400 font-mono">
+          {props.language && (
+            <span class="px-2 py-0.5 rounded-md bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 font-mono text-[11px] font-semibold shrink-0">
+              {props.language}
+            </span>
+          )}
+          <span class="text-slate-400 font-mono truncate" title={props.title}>
             {props.title || '纯文本'} • {lines().length} 行 • {props.content.length} 字符
           </span>
         </div>
 
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 shrink-0 self-end sm:self-auto">
           {/* 自动换行开关 */}
           <button
             onClick={() => setWrapLines(!wrapLines())}
@@ -67,11 +79,11 @@ export function TextPreview(props: TextPreviewProps) {
             换行: {wrapLines() ? '开' : '关'}
           </button>
 
-          {/* 下载文本文件 */}
+          {/* 下载文件 */}
           <button
             onClick={handleDownload}
             class="flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
-            title="下载为 .txt 纯文本文件"
+            title="下载文件"
           >
             <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -91,7 +103,7 @@ export function TextPreview(props: TextPreviewProps) {
             </a>
           )}
 
-          {/* 复制按钮 (暖橙高光) */}
+          {/* 复制按钮 */}
           <button
             onClick={handleCopy}
             class="flex items-center gap-1.5 px-3 py-1 rounded-md bg-accent-600 hover:bg-accent-500 text-white font-medium transition-all shadow-xs"
@@ -99,13 +111,13 @@ export function TextPreview(props: TextPreviewProps) {
             <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
             </svg>
-            <span>复制代码</span>
+            <span>复制</span>
           </button>
         </div>
       </div>
 
-      {/* 文本内容与行号 */}
-      <div class="p-4 font-mono text-sm leading-relaxed overflow-x-auto max-h-[650px] overflow-y-auto">
+      {/* 文本内容与行号：严格限高并支持横向/纵向平滑滚动 */}
+      <div class={`p-4 font-mono text-sm leading-relaxed overflow-x-auto ${props.maxHeightClass || 'max-h-[480px]'} overflow-y-auto`}>
         <div class="flex">
           {/* 行号栏 */}
           <div class="select-none text-slate-600 text-right pr-4 shrink-0 font-mono text-xs leading-relaxed border-r border-slate-800">
@@ -125,3 +137,4 @@ export function TextPreview(props: TextPreviewProps) {
     </div>
   );
 }
+

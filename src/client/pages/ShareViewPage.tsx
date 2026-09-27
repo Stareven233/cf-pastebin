@@ -6,9 +6,10 @@
 import { createSignal, onMount, Show, For } from 'solid-js';
 import { useParams, A } from '@solidjs/router';
 import { apiGetPaste } from '../utils/api';
-import { formatBytes, formatDateTime, formatRemainingTime, copyToClipboard } from '../utils/format';
+import { formatBytes, formatDateTime, formatRemainingTime, copyToClipboard, isCodeOrTextFile } from '../utils/format';
 import { AudioPlayer } from '../components/AudioPlayer';
 import { TextPreview } from '../components/TextPreview';
+import { CodeFileCard } from '../components/CodeFileCard';
 import { showToast } from '../components/Toast';
 import type { PublicPasteView } from '../../shared/types';
 
@@ -176,31 +177,42 @@ export function ShareViewPage() {
                   <Show
                     when={f.isAudio}
                     fallback={
-                      /* 通用非音频文件卡片 */
-                      <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-4 flex items-center justify-between gap-4">
-                        <div class="flex items-center gap-3 min-w-0">
-                          <div class="w-10 h-10 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">
-                            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                            </svg>
-                          </div>
-                          <div class="truncate">
-                            <p class="text-sm font-semibold text-slate-800 truncate">{f.filename}</p>
-                            <span class="text-xs text-slate-400 font-mono">{formatBytes(f.sizeBytes)}</span>
-                          </div>
-                        </div>
+                      <Show
+                        when={isCodeOrTextFile(f.filename, f.mimeType, f.sizeBytes)}
+                        fallback={
+                          /* 通用二进制文件卡片 (如压缩包、可执行文件等) */
+                          <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-4 flex items-center justify-between gap-4">
+                            <div class="flex items-center gap-3 min-w-0">
+                              <div class="w-10 h-10 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">
+                                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                                </svg>
+                              </div>
+                              <div class="truncate">
+                                <p class="text-sm font-semibold text-slate-800 truncate">{f.filename}</p>
+                                <span class="text-xs text-slate-400 font-mono">{formatBytes(f.sizeBytes)}</span>
+                              </div>
+                            </div>
 
-                        <a
-                          href={f.downloadUrl}
-                          class="px-4 py-2 rounded-xl bg-accent-600 hover:bg-accent-500 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 shrink-0"
-                          download={f.filename}
-                        >
-                          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                          </svg>
-                          <span>下载文件</span>
-                        </a>
-                      </div>
+                            <a
+                              href={f.downloadUrl}
+                              class="px-4 py-2 rounded-xl bg-accent-600 hover:bg-accent-500 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 shrink-0"
+                              download={f.filename}
+                            >
+                              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                              </svg>
+                              <span>下载文件</span>
+                            </a>
+                          </div>
+                        }
+                      >
+                        {/* 代码与文本文件在线高亮预览卡片 (缺陷 5 增强：限高 480px 滚动) */}
+                        <CodeFileCard
+                          file={f}
+                          autoExpand={data()!.files.length === 1 || f.sizeBytes <= 64 * 1024}
+                        />
+                      </Show>
                     }
                   >
                     {/* 音频专属播放卡片 */}
