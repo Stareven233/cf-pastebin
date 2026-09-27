@@ -208,6 +208,14 @@ export async function handleAdminListTokens(request: Request, env: Env): Promise
     return Response.json({ success: false, error: '未授权访问' } satisfies ApiResponse, { status: 401 });
   }
 
+  // 自动将已到达有效期的 active token 状态同步为 expired
+  const nowIso = new Date().toISOString();
+  await env.DB.prepare(`
+    UPDATE upload_tokens
+    SET status = 'expired'
+    WHERE status = 'active' AND expires_at <= ?;
+  `).bind(nowIso).run();
+
   const rows = await env.DB.prepare(`
     SELECT id, max_size_bytes, used_size_bytes, allow_permanent, status, expires_at, created_at
     FROM upload_tokens

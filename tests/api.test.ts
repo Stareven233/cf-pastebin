@@ -306,4 +306,135 @@ describe('Worker Full API Integration Tests', () => {
     const read2Res = await worker.fetch(read2Req, env, executionContext);
     expect(read2Res.status).toBe(404);
   });
+
+  it('should invalidate token and record used_size_bytes even with admin cookie (Defect 2 & 4)', async () => {
+    // 1. 管理员登录并获取 Session Cookie
+    const loginReq = new Request('http://localhost/api/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: 'testadminpassword' }),
+    });
+    const loginRes = await worker.fetch(loginReq, env, executionContext);
+    const sessionCookie = loginRes.headers.get('set-cookie')!.split(';')[0];
+
+    // 2. 生成一个 10MB 的 Token
+    const createTokenReq = new Request('http://localhost/api/admin/tokens', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: sessionCookie,
+      },
+      body: JSON.stringify({ maxSizeBytes: 10 * 1024 * 1024, durationHours: 2 }),
+    });
+    const createTokenRes = await worker.fetch(createTokenReq, env, executionContext);
+    const { data: { tokenId } } = await createTokenRes.json();
+
+    // 3. 上传 10 字节的文件
+    const fileBytes = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    const uploadReq = new Request(`http://localhost/api/upload/direct?filename=test.bin&size=10&token=${tokenId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        // 关键点：即使请求头中携带了管理员 Session Cookie，也应严格走 Token 校验
+        Cookie: sessionCookie,
+      },
+      body: fileBytes,
+    });
+    const uploadRes = await worker.fetch(uploadReq, env, executionContext);
+    expect(uploadRes.status).toBe(200);
+    const { data: { r2Key } } = await uploadRes.json();
+
+    // 4. 提交完成上传：携带 Token + 10 字节文件 + 纯文本 "Hello" (5 字节)
+    const textStr = 'Hello'; // 5 字节
+    const completeReq = new Request('http://localhost/api/upload/complete', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: sessionCookie, // 模拟在管理员已登录的浏览器中代为测试访客 Token
+      },
+      body: JSON.stringify({
+        token: tokenId,
+        title: '混合内容上传',
+        textContent: textStr,
+        files: [{ r2Key, filename: 'test.bin', mimeType: 'application/octet-stream', sizeBytes: 10 }],
+      }),
+    });
+    const completeRes = await worker.fetch(completeReq, env, executionContext);
+    expect(completeRes.status).toBe(200);
+
+    // 5. 校验该 Token 必须被作废且准确记录消耗字节数为 10 + 5 = 15 字节
+    const tokensListReq = new Request('http://localhost/api/admin/tokens', {
+      headers: { Cookie: sessionCookie },
+    });
+    const tokensListRes = await worker.fetch(tokensListReq, env, executionContext);
+    const tokensList = await tokensListRes.json();
+    const tokenRecord = tokensList.data.find((t: any) => t.id === tokenId);
+
+    expect(tokenRecord).toBeTruthy();
+    expect(tokenRecord.status).toBe('used');
+    expect(tokenRecord.used_size_bytes).toBe(15);
+
+    // 6. 校验再次使用该 Token 会被拒绝 (410)
+    const reuseReq = new Request(`http://localhost/api/upload/token-info?token=${tokenId}`);
+    const reuseRes = await worker.fetch(reuseReq, env, executionContext);
+    expect(reuseRes.status).toBe(410);
+  });
+
+  it('should accurately count UTF-8 bytes for text-only token uploads and reject quota overflow', async () => {
+    // 1. 管理员登录
+    const loginReq = new Request('http://localhost/api/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: 'testadminpassword' }),
+    });
+    const loginRes = await worker.fetch(loginReq, env, executionContext);
+    const sessionCookie = loginRes.headers.get('set-cookie')!.split(';')[0];
+
+    // 2. 创建一个小配额 Token (50 字节)
+    // 允许我们在测试中通过直接在 SQLite 中插入一个 50 字节的限制
+    const smallTokenId = 'small-token-uuid-50b';
+    sqlite.run(`
+      INSERT INTO upload_tokens (id, max_size_bytes, used_size_bytes, allow_permanent, status, expires_at, created_at)
+      VALUES ('${smallTokenId}', 50, 0, 0, 'active', datetime('now', '+1 hour'), datetime('now'));
+    `);
+
+    // 3. 测试纯文本超额上传：中文 "你好世界，这是一段超过五十个字节的测试文本喵！" UTF-8 编码为 66 字节
+    const longText = '你好世界，这是一段超过五十个字节的测试文本喵！';
+    const longTextBytes = new TextEncoder().encode(longText).length;
+    expect(longTextBytes).toBeGreaterThan(50);
+
+    const overflowReq = new Request('http://localhost/api/upload/complete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token: smallTokenId,
+        textContent: longText,
+      }),
+    });
+    const overflowRes = await worker.fetch(overflowReq, env, executionContext);
+    expect(overflowRes.status).toBe(400);
+    const overflowData = await overflowRes.json();
+    expect(overflowData.error).toContain('超出了该凭证允许的最大配额');
+
+    // 4. 测试合法纯文本上传：短文本 "主人好喵！" (15 字节 UTF-8)
+    const validText = '主人好喵！';
+    const validTextBytes = new TextEncoder().encode(validText).length;
+    expect(validTextBytes).toBeLessThanOrEqual(50);
+
+    const validReq = new Request('http://localhost/api/upload/complete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token: smallTokenId,
+        textContent: validText,
+      }),
+    });
+    const validRes = await worker.fetch(validReq, env, executionContext);
+    expect(validRes.status).toBe(200);
+
+    // 5. 校验数据库中该 Token 的 used_size_bytes 严格等于 15
+    const row = sqlite.query(`SELECT status, used_size_bytes FROM upload_tokens WHERE id = ?`).get(smallTokenId) as any;
+    expect(row.status).toBe('used');
+    expect(row.used_size_bytes).toBe(validTextBytes);
+  });
 });

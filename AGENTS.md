@@ -10,4 +10,4 @@
 - 代码/关键文档变动后，在末尾输出一条英文 Sentry Commit Message（不要帮我提交）
 
 ## 3. 技术栈
-bun+typescript+solidjs+tailwindcss
+Bun + TypeScript + SolidJS (SolidStart) + TailwindCSS + Cloudflare D1 + Cloudflare R2 + Workers (Static Assets & Crons)

@@ -94,31 +94,42 @@ export async function handleDirectFileUpload(request: Request, env: Env): Promis
     } satisfies ApiResponse, { status: 503 });
   }
 
-  // 2. 鉴权：优先检查是否为管理员，若非管理员则校验 Token
-  const isAdmin = await verifyAdminSession(request, env);
-  let tokenInfo: { max_size_bytes: number; used_size_bytes: number } | null = null;
+  // 2. 鉴权：优先 Token 消费模式（无论客户端是否已登录管理员，带 Token 均优先校验并核验配额）
+  let tokenInfo: { id: string; max_size_bytes: number; used_size_bytes: number } | null = null;
 
-  if (!isAdmin) {
-    if (!token) {
-      return Response.json({ success: false, error: '无上传权限，缺少 Token 凭证' } satisfies ApiResponse, { status: 401 });
-    }
-
+  if (token) {
     const row = await env.DB.prepare(`
-      SELECT max_size_bytes, used_size_bytes, status, expires_at
+      SELECT id, max_size_bytes, used_size_bytes, status, expires_at
       FROM upload_tokens
       WHERE id = ?;
     `).bind(token).first<{
+      id: string;
       max_size_bytes: number;
       used_size_bytes: number;
       status: string;
       expires_at: string;
     }>();
 
-    if (!row || row.status !== 'active' || new Date(row.expires_at).getTime() < Date.now()) {
-      return Response.json({ success: false, error: '上传凭证无效或已过期' } satisfies ApiResponse, { status: 403 });
+    if (!row) {
+      return Response.json({ success: false, error: '上传凭证不存在或无效' } satisfies ApiResponse, { status: 404 });
+    }
+
+    if (row.status === 'used') {
+      return Response.json({ success: false, error: '此上传凭证已被使用并作废' } satisfies ApiResponse, { status: 410 });
+    }
+
+    if (row.status === 'expired' || new Date(row.expires_at).getTime() < Date.now()) {
+      await env.DB.prepare(`UPDATE upload_tokens SET status = 'expired' WHERE id = ?;`).bind(token).run();
+      return Response.json({ success: false, error: '此上传凭证已过期' } satisfies ApiResponse, { status: 410 });
     }
 
     tokenInfo = row;
+  } else {
+    // 未携带 Token 时，必须为合法管理员自用通道
+    const isAdmin = await verifyAdminSession(request, env);
+    if (!isAdmin) {
+      return Response.json({ success: false, error: '无上传权限，缺少 Token 凭证' } satisfies ApiResponse, { status: 401 });
+    }
   }
 
   // 3. 单文件大小上限校验 (<= 25MB)
@@ -194,7 +205,6 @@ export async function handleCompleteUpload(request: Request, env: Env): Promise<
     } satisfies ApiResponse, { status: 503 });
   }
 
-  const isAdmin = await verifyAdminSession(request, env);
   let body: {
     token?: string;
     title?: string;
@@ -230,13 +240,10 @@ export async function handleCompleteUpload(request: Request, env: Env): Promise<
 
   let tokenId: string | null = null;
   let canBePermanent = false;
+  let tokenConsumedBytes = 0;
 
-  // 2. 鉴权与 Token 状态核查
-  if (!isAdmin) {
-    if (!token) {
-      return Response.json({ success: false, error: '缺少有效的上传 Token 凭证' } satisfies ApiResponse, { status: 401 });
-    }
-
+  // 2. 鉴权与 Token 状态核查：优先消费 Token（即使客户端带有管理员 Cookie，也必须严格核验并核销 Token）
+  if (token) {
     const tokenRow = await env.DB.prepare(`
       SELECT id, max_size_bytes, allow_permanent, status, expires_at
       FROM upload_tokens
@@ -249,22 +256,39 @@ export async function handleCompleteUpload(request: Request, env: Env): Promise<
       expires_at: string;
     }>();
 
-    if (!tokenRow || tokenRow.status !== 'active' || new Date(tokenRow.expires_at).getTime() < Date.now()) {
-      return Response.json({ success: false, error: '上传凭证已失效、已使用或已过期' } satisfies ApiResponse, { status: 403 });
+    if (!tokenRow) {
+      return Response.json({ success: false, error: '上传凭证不存在或无效' } satisfies ApiResponse, { status: 404 });
     }
 
-    // 校验总文件大小是否超出配额
+    if (tokenRow.status === 'used') {
+      return Response.json({ success: false, error: '此上传凭证已被使用并作废' } satisfies ApiResponse, { status: 410 });
+    }
+
+    if (tokenRow.status === 'expired' || new Date(tokenRow.expires_at).getTime() < Date.now()) {
+      await env.DB.prepare(`UPDATE upload_tokens SET status = 'expired' WHERE id = ?;`).bind(token).run();
+      return Response.json({ success: false, error: '此上传凭证已过期' } satisfies ApiResponse, { status: 410 });
+    }
+
+    // 计算总消耗容量：包括文件总大小和纯文本 UTF-8 字节长度（缺陷 4 修复）
     const totalFilesSize = files.reduce((acc, cur) => acc + (cur.sizeBytes || 0), 0);
-    if (totalFilesSize > tokenRow.max_size_bytes) {
+    const textSizeBytes = textContent ? new TextEncoder().encode(textContent.trim()).length : 0;
+    tokenConsumedBytes = totalFilesSize + textSizeBytes;
+
+    if (tokenConsumedBytes > tokenRow.max_size_bytes) {
       return Response.json({
         success: false,
-        error: `上传的所有文件总大小 (${(totalFilesSize / 1024 / 1024).toFixed(2)} MB) 超出了该凭证允许的最大配额 (${(tokenRow.max_size_bytes / 1024 / 1024).toFixed(2)} MB)`
+        error: `上传内容总大小 (${(tokenConsumedBytes / 1024 / 1024).toFixed(2)} MB) 超出了该凭证允许的最大配额 (${(tokenRow.max_size_bytes / 1024 / 1024).toFixed(2)} MB)`
       } satisfies ApiResponse, { status: 400 });
     }
 
     tokenId = tokenRow.id;
     canBePermanent = tokenRow.allow_permanent === 1;
   } else {
+    // 未带 Token 模式：校验管理员会话
+    const isAdmin = await verifyAdminSession(request, env);
+    if (!isAdmin) {
+      return Response.json({ success: false, error: '缺少有效的上传 Token 凭证' } satisfies ApiResponse, { status: 401 });
+    }
     canBePermanent = true;
     tokenId = null;
   }
@@ -315,7 +339,7 @@ export async function handleCompleteUpload(request: Request, env: Env): Promise<
       burnAfterRead ? 1 : 0,
       expiresAtIso,
       nowIso,
-      isAdmin ? 'admin' : tokenId
+      tokenId || 'admin'
     )
   );
 
@@ -338,14 +362,14 @@ export async function handleCompleteUpload(request: Request, env: Env): Promise<
     );
   }
 
-  // 作废一次性 Token (状态设为 used，记录消耗容量)
+  // 作废一次性 Token (状态设为 used，记录实际消耗总容量：文件 + 文本)
   if (tokenId) {
     statements.push(
       env.DB.prepare(`
         UPDATE upload_tokens
         SET status = 'used', used_size_bytes = ?
         WHERE id = ?;
-      `).bind(totalSizeBytes, tokenId)
+      `).bind(tokenConsumedBytes, tokenId)
     );
   }
 
