@@ -459,37 +459,37 @@ export function AdminPage() {
             </div>
           </Show>
 
-          {/* 选项卡导航 */}
-          <div class="flex items-center gap-2 border-b border-slate-200 pb-2">
+          {/* 选项卡导航：移动端等宽网格自适应，大屏弹性排列 */}
+          <div class="grid grid-cols-3 gap-1.5 sm:flex sm:items-center sm:gap-2 border-b border-slate-200 pb-2">
             <button
               onClick={() => setActiveTab('dashboard')}
-              class={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              class={`px-2 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all text-center ${
                 activeTab() === 'dashboard'
                   ? 'bg-emerald-700 text-white shadow-xs'
                   : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
-              📊 配额概览与自用上传
+              📊 概览与上传
             </button>
             <button
               onClick={() => { setActiveTab('pastes'); loadPastes(); }}
-              class={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              class={`px-2 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all text-center ${
                 activeTab() === 'pastes'
                   ? 'bg-emerald-700 text-white shadow-xs'
                   : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
-              📁 分享管理 ({pastesList().length})
+              📁 分享 ({pastesList().length})
             </button>
             <button
               onClick={() => { setActiveTab('tokens'); loadTokens(); }}
-              class={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              class={`px-2 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all text-center ${
                 activeTab() === 'tokens'
                   ? 'bg-emerald-700 text-white shadow-xs'
                   : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
-              🔑 Token 派发 ({tokensList().length})
+              🔑 凭证 ({tokensList().length})
             </button>
           </div>
 
@@ -833,89 +833,162 @@ export function AdminPage() {
                 />
               </div>
 
-              {/* 列表表格 */}
-              <div class="overflow-x-auto">
-                <table class="w-full text-left text-xs text-slate-600">
-                  <thead class="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
-                    <tr>
-                      <th class="p-3">短链 Slug</th>
-                      <th class="p-3">标题 / 文件名</th>
-                      <th class="p-3">类型</th>
-                      <th class="p-3">体积</th>
-                      <th class="p-3">创建时间</th>
-                      <th class="p-3">到期状态</th>
-                      <th class="p-3">下载/浏览</th>
-                      <th class="p-3 text-right">操作</th>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-slate-100">
-                    <For each={filteredPastes()} fallback={
-                      <tr>
-                        <td colspan={8} class="p-8 text-center text-slate-400">
-                          {isLoadingPastes() ? '正在拉取数据喵...' : '暂无分享记录'}
-                        </td>
-                      </tr>
-                    }>
-                      {(item) => (
-                        <tr class="hover:bg-slate-50/80 transition-colors">
-                          <td class="p-3 font-mono font-bold text-emerald-800">
-                            /s/{item.slug}
-                          </td>
-                          <td class="p-3 max-w-[200px] truncate" title={item.title || ''}>
-                            {item.title || (item.files.length > 0 ? item.files[0].filename : '文本')}
-                          </td>
-                          <td class="p-3">
-                            <span class="px-2 py-0.5 rounded-md bg-slate-100 font-mono text-[10px]">
+                {/* 移动端卡片列表视图 (md:hidden) */}
+                <div class="md:hidden space-y-3">
+                  <For each={filteredPastes()} fallback={
+                    <div class="p-8 text-center text-slate-400 text-xs bg-slate-50 rounded-2xl">
+                      {isLoadingPastes() ? '正在拉取数据喵...' : '暂无分享记录'}
+                    </div>
+                  }>
+                    {(item) => (
+                      <div class="p-4 rounded-2xl border border-slate-200 bg-slate-50/50 space-y-3 text-xs">
+                        <div class="flex items-center justify-between gap-2">
+                          <div class="flex items-center gap-2 truncate">
+                            <span class="font-mono font-bold text-emerald-800 text-sm">
+                              /s/{item.slug}
+                            </span>
+                            <span class="px-2 py-0.5 rounded-md bg-white border border-slate-200 font-mono text-[10px] text-slate-600 shrink-0">
                               {item.type}
                             </span>
-                          </td>
-                          <td class="p-3 font-mono">{formatBytes(item.total_size_bytes)}</td>
-                          <td class="p-3 text-slate-400">{formatDateTime(item.created_at)}</td>
-                          <td class="p-3">
-                            <span class="font-medium text-emerald-700">
-                              {formatRemainingTime(item.expires_at)}
-                            </span>
                             <Show when={item.burn_after_read === 1}>
-                              <span class="ml-1 px-1.5 py-0.5 rounded-sm bg-accent-100 text-accent-800 text-[10px]">
-                                焚
+                              <span class="px-1.5 py-0.5 rounded-sm bg-accent-100 text-accent-800 font-bold text-[10px] shrink-0">
+                                阅后即焚
                               </span>
                             </Show>
-                          </td>
-                          <td class="p-3 font-mono text-slate-500">
-                            {item.download_count} / {item.view_count}
-                          </td>
-                          <td class="p-3 text-right space-x-1.5 shrink-0">
-                            <a
-                              href={`/s/${item.slug}?admin_preview=1`}
-                              target="_blank"
-                              class="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 hover:bg-emerald-100 font-semibold"
-                              title="管理特权查阅：不计入浏览/下载统计，不触发阅后即焚"
-                            >
-                              查阅
-                            </a>
-                            <button
-                              onClick={async () => {
-                                await copyToClipboard(`${window.location.origin}/s/${item.slug}`);
-                                showToast('公共分享链接已复制喵！', 'success');
-                              }}
-                              class="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 font-semibold"
-                              title="复制标准公共分享链接 (可测试真实访问统计与阅后即焚)"
-                            >
-                              复制
-                            </button>
-                            <button
-                              onClick={() => handleDeletePaste(item.id, item.slug)}
-                              class="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 font-semibold"
-                            >
-                              彻底删除
-                            </button>
+                          </div>
+
+                          <span class="text-[11px] font-mono text-slate-400 shrink-0">
+                            {formatBytes(item.total_size_bytes)}
+                          </span>
+                        </div>
+
+                        <p class="font-semibold text-slate-800 text-xs line-clamp-1" title={item.title || ''}>
+                          {item.title || (item.files.length > 0 ? item.files[0].filename : '纯文本分享')}
+                        </p>
+
+                        <div class="grid grid-cols-2 gap-2 text-[11px] text-slate-600 bg-white p-2.5 rounded-xl border border-slate-100">
+                          <div>
+                            <span class="text-slate-400 block">到期时效</span>
+                            <span class="font-medium text-emerald-700">{formatRemainingTime(item.expires_at)}</span>
+                          </div>
+                          <div>
+                            <span class="text-slate-400 block">下载 / 浏览</span>
+                            <span class="font-mono font-bold text-slate-700">{item.download_count} / {item.view_count}</span>
+                          </div>
+                        </div>
+
+                        <div class="flex items-center justify-end gap-2 pt-1 border-t border-slate-100">
+                          <a
+                            href={`/s/${item.slug}?admin_preview=1`}
+                            target="_blank"
+                            class="px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-800 font-semibold text-xs"
+                          >
+                            查阅
+                          </a>
+                          <button
+                            onClick={async () => {
+                              await copyToClipboard(`${window.location.origin}/s/${item.slug}`);
+                              showToast('公共分享链接已复制喵！', 'success');
+                            }}
+                            class="px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-700 font-semibold text-xs"
+                          >
+                            复制链接
+                          </button>
+                          <button
+                            onClick={() => handleDeletePaste(item.id, item.slug)}
+                            class="px-2.5 py-1.5 rounded-lg bg-rose-50 text-rose-700 font-semibold text-xs"
+                          >
+                            删除
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </For>
+                </div>
+
+                {/* PC/平板标准表格 (hidden md:block) */}
+                <div class="hidden md:block overflow-x-auto">
+                  <table class="w-full text-left text-xs text-slate-600">
+                    <thead class="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
+                      <tr>
+                        <th class="p-3">短链 Slug</th>
+                        <th class="p-3">标题 / 文件名</th>
+                        <th class="p-3">类型</th>
+                        <th class="p-3">体积</th>
+                        <th class="p-3">创建时间</th>
+                        <th class="p-3">到期状态</th>
+                        <th class="p-3">下载/浏览</th>
+                        <th class="p-3 text-right">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                      <For each={filteredPastes()} fallback={
+                        <tr>
+                          <td colspan={8} class="p-8 text-center text-slate-400">
+                            {isLoadingPastes() ? '正在拉取数据喵...' : '暂无分享记录'}
                           </td>
                         </tr>
-                      )}
-                    </For>
-                  </tbody>
-                </table>
-              </div>
+                      }>
+                        {(item) => (
+                          <tr class="hover:bg-slate-50/80 transition-colors">
+                            <td class="p-3 font-mono font-bold text-emerald-800">
+                              /s/{item.slug}
+                            </td>
+                            <td class="p-3 max-w-[200px] truncate" title={item.title || ''}>
+                              {item.title || (item.files.length > 0 ? item.files[0].filename : '文本')}
+                            </td>
+                            <td class="p-3">
+                              <span class="px-2 py-0.5 rounded-md bg-slate-100 font-mono text-[10px]">
+                                {item.type}
+                              </span>
+                            </td>
+                            <td class="p-3 font-mono">{formatBytes(item.total_size_bytes)}</td>
+                            <td class="p-3 text-slate-400">{formatDateTime(item.created_at)}</td>
+                            <td class="p-3">
+                              <span class="font-medium text-emerald-700">
+                                {formatRemainingTime(item.expires_at)}
+                              </span>
+                              <Show when={item.burn_after_read === 1}>
+                                <span class="ml-1 px-1.5 py-0.5 rounded-sm bg-accent-100 text-accent-800 text-[10px]">
+                                  焚
+                                </span>
+                              </Show>
+                            </td>
+                            <td class="p-3 font-mono text-slate-500">
+                              {item.download_count} / {item.view_count}
+                            </td>
+                            <td class="p-3 text-right space-x-1.5 shrink-0">
+                              <a
+                                href={`/s/${item.slug}?admin_preview=1`}
+                                target="_blank"
+                                class="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 hover:bg-emerald-100 font-semibold"
+                                title="管理特权查阅：不计入浏览/下载统计，不触发阅后即焚"
+                              >
+                                查阅
+                              </a>
+                              <button
+                                onClick={async () => {
+                                  await copyToClipboard(`${window.location.origin}/s/${item.slug}`);
+                                  showToast('公共分享链接已复制喵！', 'success');
+                                }}
+                                class="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 font-semibold"
+                                title="复制标准公共分享链接 (可测试真实访问统计与阅后即焚)"
+                              >
+                                复制
+                              </button>
+                              <button
+                                onClick={() => handleDeletePaste(item.id, item.slug)}
+                                class="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 font-semibold"
+                              >
+                                彻底删除
+                              </button>
+                            </td>
+                          </tr>
+                        )}
+                      </For>
+                    </tbody>
+                  </table>
+                </div>
             </div>
           </Show>
 
@@ -996,14 +1069,100 @@ export function AdminPage() {
                 </Show>
               </div>
 
-              {/* Token 列表 */}
-              <div class="bg-white rounded-3xl border border-slate-200/80 shadow-xs p-6 space-y-4">
-                <h3 class="text-base font-bold text-slate-800">历史 Token 凭证清单</h3>
-                <div class="overflow-x-auto">
+              {/* Token 列表 (缺陷 4 界面层修复 & 缺陷 6 移动端卡片视图) */}
+              <div class="bg-white rounded-3xl border border-slate-200/80 shadow-xs p-4 sm:p-6 space-y-4">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <h3 class="text-base font-bold text-slate-800">历史 Token 凭证清单</h3>
+                    <p class="text-xs text-slate-500 mt-0.5">随时复制专属上传链接派发好友，查看配额与实际消耗喵</p>
+                  </div>
+                  <span class="text-xs font-mono text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg">
+                    共 {tokensList().length} 个
+                  </span>
+                </div>
+
+                {/* 移动端卡片列表视图 (md:hidden) */}
+                <div class="md:hidden space-y-3">
+                  <For each={tokensList()} fallback={
+                    <div class="p-8 text-center text-slate-400 text-xs bg-slate-50 rounded-2xl">
+                      {isLoadingTokens() ? '正在拉取 Token 列表喵...' : '暂无 Token 记录'}
+                    </div>
+                  }>
+                    {(t) => (
+                      <div class="p-4 rounded-2xl border border-slate-200 bg-slate-50/50 space-y-3 text-xs">
+                        <div class="flex items-center justify-between gap-2">
+                          <div class="flex items-center gap-2 truncate">
+                            <span class={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
+                              t.status === 'active'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : t.status === 'used'
+                                ? 'bg-slate-200 text-slate-700'
+                                : 'bg-rose-100 text-rose-800'
+                            }`}>
+                              {t.status === 'active' ? '有效' : t.status === 'used' ? '已使用作废' : '已过期'}
+                            </span>
+                            <span class="font-mono font-bold text-slate-800 truncate" title={t.id}>
+                              {t.id.substring(0, 13)}...
+                            </span>
+                          </div>
+                          <button
+                            onClick={async () => {
+                              await copyToClipboard(t.id);
+                              showToast('Token 密钥已复制喵！', 'success');
+                            }}
+                            class="text-[11px] text-brand-600 hover:text-brand-700 font-semibold shrink-0"
+                          >
+                            复制ID
+                          </button>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2 text-[11px] text-slate-600 bg-white p-3 rounded-xl border border-slate-100">
+                          <div>
+                            <span class="text-slate-400 block">配额上限</span>
+                            <span class="font-mono font-semibold">{formatBytes(t.max_size_bytes)}</span>
+                          </div>
+                          <div>
+                            <span class="text-slate-400 block">实际消耗</span>
+                            <span class="font-mono font-semibold text-emerald-700">{formatBytes(t.used_size_bytes)}</span>
+                          </div>
+                          <div class="col-span-2 pt-1 border-t border-slate-50">
+                            <span class="text-slate-400 block">到期时效</span>
+                            <span class="font-medium text-slate-700">{formatRemainingTime(t.expires_at)}</span>
+                            <span class="text-[10px] text-slate-400 font-mono ml-1">({formatDateTime(t.expires_at)})</span>
+                          </div>
+                        </div>
+
+                        <div class="flex items-center justify-end gap-2 pt-1">
+                          <button
+                            onClick={async () => {
+                              const uploadUrl = `${window.location.origin}/upload?token=${t.id}`;
+                              await copyToClipboard(uploadUrl);
+                              showToast('上传专属链接已复制到剪贴板喵！', 'success');
+                            }}
+                            class="px-3 py-1.5 rounded-lg bg-brand-50 hover:bg-brand-100 text-brand-700 font-semibold text-xs transition-colors"
+                          >
+                            复制专属链接
+                          </button>
+                          <Show when={t.status === 'active'}>
+                            <button
+                              onClick={() => handleRevokeToken(t.id)}
+                              class="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold text-xs transition-colors"
+                            >
+                              作废
+                            </button>
+                          </Show>
+                        </div>
+                      </div>
+                    )}
+                  </For>
+                </div>
+
+                {/* PC/平板标准增强表格 (hidden md:block) */}
+                <div class="hidden md:block overflow-x-auto">
                   <table class="w-full text-left text-xs text-slate-600">
                     <thead class="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
                       <tr>
-                        <th class="p-3">Token ID</th>
+                        <th class="p-3">Token 凭证 ID</th>
                         <th class="p-3">配额大小</th>
                         <th class="p-3">实际消耗</th>
                         <th class="p-3">状态</th>
@@ -1022,9 +1181,27 @@ export function AdminPage() {
                       }>
                         {(t) => (
                           <tr class="hover:bg-slate-50/80 transition-colors">
-                            <td class="p-3 font-mono font-semibold text-slate-800">{t.id.substring(0, 8)}...</td>
-                            <td class="p-3 font-mono">{formatBytes(t.max_size_bytes)}</td>
-                            <td class="p-3 font-mono">{formatBytes(t.used_size_bytes)}</td>
+                            <td class="p-3">
+                              <div class="flex items-center gap-1.5">
+                                <span class="font-mono font-semibold text-slate-800" title={t.id}>
+                                  {t.id.substring(0, 10)}...
+                                </span>
+                                <button
+                                  onClick={async () => {
+                                    await copyToClipboard(t.id);
+                                    showToast('Token 完整密钥已复制喵！', 'success');
+                                  }}
+                                  class="text-slate-400 hover:text-emerald-700 p-0.5 transition-colors"
+                                  title={`点击复制完整 Token: ${t.id}`}
+                                >
+                                  <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </td>
+                            <td class="p-3 font-mono font-medium">{formatBytes(t.max_size_bytes)}</td>
+                            <td class="p-3 font-mono font-semibold text-emerald-800">{formatBytes(t.used_size_bytes)}</td>
                             <td class="p-3">
                               <span class={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                                 t.status === 'active'
@@ -1036,9 +1213,33 @@ export function AdminPage() {
                                 {t.status === 'active' ? '有效' : t.status === 'used' ? '已使用作废' : '已过期'}
                               </span>
                             </td>
-                            <td class="p-3 text-slate-500">{formatDateTime(t.expires_at)}</td>
-                            <td class="p-3 text-slate-400">{formatDateTime(t.created_at)}</td>
-                            <td class="p-3 text-right">
+                            <td class="p-3 text-slate-500">
+                              <span class="block">{formatRemainingTime(t.expires_at)}</span>
+                              <span class="text-[10px] text-slate-400">{formatDateTime(t.expires_at)}</span>
+                            </td>
+                            <td class="p-3 text-slate-400 font-mono text-[11px]">{formatDateTime(t.created_at)}</td>
+                            <td class="p-3 text-right space-x-1.5 shrink-0">
+                              <button
+                                onClick={async () => {
+                                  const uploadUrl = `${window.location.origin}/upload?token=${t.id}`;
+                                  await copyToClipboard(uploadUrl);
+                                  showToast('专属上传链接已复制喵！可直接发给好友', 'success');
+                                }}
+                                class="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 hover:bg-emerald-100 font-semibold"
+                                title="复制专属上传链接"
+                              >
+                                复制链接
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  await copyToClipboard(t.id);
+                                  showToast('Token 密钥已复制喵！', 'success');
+                                }}
+                                class="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 font-semibold"
+                                title="复制 Token ID 密钥"
+                              >
+                                复制ID
+                              </button>
                               <Show when={t.status === 'active'}>
                                 <button
                                   onClick={() => handleRevokeToken(t.id)}

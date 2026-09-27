@@ -137,16 +137,19 @@ export function ShareViewPage() {
               </h2>
             </div>
 
-            {/* 倒计时与下载统计 */}
-            <div class="flex flex-wrap items-center gap-2 sm:gap-3 text-xs">
-              <div class="px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 font-medium">
-                剩余时效：<span class="font-bold text-emerald-700">{formatRemainingTime(data()!.expiresAt)}</span>
+            {/* 倒计时与下载统计：移动端 3 列网格对齐，大屏弹性排列 */}
+            <div class="grid grid-cols-3 gap-1.5 sm:flex sm:items-center sm:gap-3 text-xs w-full sm:w-auto">
+              <div class="px-2 sm:px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 font-medium text-center sm:text-left">
+                <span class="block text-[10px] text-slate-400">剩余时效</span>
+                <span class="font-bold text-emerald-700 text-xs truncate block">{formatRemainingTime(data()!.expiresAt)}</span>
               </div>
-              <div class="px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 font-medium">
-                下载次数：<span class="font-bold text-slate-800">{data()!.downloadCount}</span>
+              <div class="px-2 sm:px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 font-medium text-center sm:text-left">
+                <span class="block text-[10px] text-slate-400">下载次数</span>
+                <span class="font-bold text-slate-800 text-xs block">{data()!.downloadCount}</span>
               </div>
-              <div class="px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 font-medium">
-                总容量：<span class="font-bold text-slate-800">{formatBytes(data()!.totalSizeBytes)}</span>
+              <div class="px-2 sm:px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 font-medium text-center sm:text-left">
+                <span class="block text-[10px] text-slate-400">总容量</span>
+                <span class="font-bold text-slate-800 text-xs truncate block">{formatBytes(data()!.totalSizeBytes)}</span>
               </div>
             </div>
           </div>
@@ -228,33 +231,33 @@ export function ShareViewPage() {
             </div>
           </Show>
 
-          {/* 底部便捷操作栏 */}
-          <div class="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-200">
-            <div class="flex items-center gap-2">
+          {/* 底部便捷操作栏：移动端响应式网格与大屏对齐 */}
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-4 border-t border-slate-200">
+            <div class="grid grid-cols-2 gap-2 sm:flex sm:items-center">
               <button
                 onClick={handleCopyPageUrl}
-                class="px-4 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold shadow-2xs transition-colors flex items-center gap-1.5"
+                class="w-full sm:w-auto px-3 sm:px-4 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold shadow-2xs transition-colors flex items-center justify-center gap-1.5"
               >
-                <svg class="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                 </svg>
-                <span>复制分享页链接</span>
+                <span>复制分享页</span>
               </button>
 
               <button
                 onClick={handleCopyDirectUrl}
-                class="px-4 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold shadow-2xs transition-colors flex items-center gap-1.5"
+                class="w-full sm:w-auto px-3 sm:px-4 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold shadow-2xs transition-colors flex items-center justify-center gap-1.5"
               >
-                <svg class="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                 </svg>
-                <span>复制 Direct 直链</span>
+                <span>复制直链</span>
               </button>
             </div>
 
             <A
               href="/upload"
-              class="text-xs font-semibold text-emerald-700 hover:text-emerald-800 transition-colors"
+              class="text-xs font-semibold text-emerald-700 hover:text-emerald-800 transition-colors text-center sm:text-right py-1"
             >
               我要分享新内容 →
             </A>

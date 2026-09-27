@@ -35,18 +35,18 @@ export function QuotaGauge(props: QuotaGaugeProps) {
   return (
     <div class="bg-white rounded-2xl border border-slate-100 shadow-xs p-5 flex flex-col justify-between transition-all hover:shadow-md">
       <div>
-        <div class="flex items-center justify-between mb-3">
-          <span class="text-sm font-semibold text-slate-700">{props.title}</span>
-          <span class={`text-xs px-2.5 py-0.5 rounded-full font-medium border ${badgeBg()}`}>
+        <div class="flex items-center justify-between gap-2 mb-2.5">
+          <span class="text-xs sm:text-sm font-semibold text-slate-700 truncate" title={props.title}>{props.title}</span>
+          <span class={`text-[10px] sm:text-xs px-2 py-0.5 rounded-full font-medium border shrink-0 ${badgeBg()}`}>
             {statusText()}
           </span>
         </div>
 
-        <div class="flex items-baseline gap-2 mb-2">
-          <span class="text-2xl font-bold font-mono text-slate-900">
+        <div class="flex flex-wrap items-baseline gap-1.5 mb-2">
+          <span class="text-xl sm:text-2xl font-bold font-mono text-slate-900 break-all">
             {props.usedLabel}
           </span>
-          <span class="text-xs text-slate-400 font-mono">
+          <span class="text-[11px] sm:text-xs text-slate-400 font-mono">
             / {props.maxLabel}
           </span>
         </div>

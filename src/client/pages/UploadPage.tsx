@@ -218,10 +218,10 @@ export function UploadPage() {
     <div class="max-w-4xl mx-auto px-4 py-8 sm:py-12">
       {/* 标题说明区 */}
       <div class="text-center mb-8">
-        <h1 class="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl">
+        <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight sm:text-4xl">
           私密分享与文件暂存
         </h1>
-        <p class="mt-2 text-sm text-slate-500 max-w-lg mx-auto">
+        <p class="mt-2 text-xs sm:text-sm text-slate-500 max-w-lg mx-auto">
           基于 Cloudflare 边缘计算与 R2 对象存储，支持单文件 25MB 内音频/附件与纯文本，安全合规、用完即焚喵
         </p>
       </div>
@@ -527,12 +527,12 @@ export function UploadPage() {
           <div class="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3 text-left">
             <div>
               <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">网页落地页 (可在线播放/预览)</span>
-              <div class="flex items-center gap-2 mt-1">
+              <div class="flex items-center gap-2 mt-1 min-w-0">
                 <input
                   type="text"
                   readOnly
                   value={`${window.location.origin}${createdResult()!.shareUrl}`}
-                  class="grow px-3 py-2 text-xs font-mono bg-white border border-slate-200 rounded-xl select-all"
+                  class="grow min-w-0 px-3 py-2 text-xs font-mono bg-white border border-slate-200 rounded-xl select-all"
                 />
                 <button
                   onClick={async () => {
@@ -548,12 +548,12 @@ export function UploadPage() {
 
             <div>
               <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Direct 直链 (直接下载/命令行)</span>
-              <div class="flex items-center gap-2 mt-1">
+              <div class="flex items-center gap-2 mt-1 min-w-0">
                 <input
                   type="text"
                   readOnly
                   value={`${window.location.origin}${createdResult()!.directUrl}`}
-                  class="grow px-3 py-2 text-xs font-mono bg-white border border-slate-200 rounded-xl select-all"
+                  class="grow min-w-0 px-3 py-2 text-xs font-mono bg-white border border-slate-200 rounded-xl select-all"
                 />
                 <button
                   onClick={async () => {
