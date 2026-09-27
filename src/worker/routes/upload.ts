@@ -6,6 +6,7 @@ import { MAX_SINGLE_FILE_SIZE, MAX_ADMIN_FILE_SIZE } from '../../shared/constant
 import { isCircuitBroken, adjustStorageBytes, incrementMetric } from '../metrics';
 import { verifyAdminSession } from '../auth';
 import { generateUniqueSlug } from '../slug';
+import { getMimeType } from '../../shared/mime';
 import type { Env } from '../db';
 import type { ApiResponse } from '../../shared/types';
 
@@ -82,7 +83,8 @@ export async function handleDirectFileUpload(request: Request, env: Env): Promis
   const token = url.searchParams.get('token');
   const filename = decodeURIComponent(url.searchParams.get('filename') || 'untitled.bin');
   const sizeParam = parseInt(url.searchParams.get('size') || '0', 10);
-  const mimeType = request.headers.get('content-type') || 'application/octet-stream';
+  const rawMime = request.headers.get('content-type');
+  const mimeType = getMimeType(filename, rawMime);
 
   // 1. 熔断检查
   const circuit = await isCircuitBroken(env.DB);
@@ -349,6 +351,7 @@ export async function handleCompleteUpload(request: Request, env: Env): Promise<
   // 插入文件详情记录
   for (const f of files) {
     const fileRecordId = crypto.randomUUID();
+    const finalMime = getMimeType(f.filename, f.mimeType);
     statements.push(
       env.DB.prepare(`
         INSERT INTO paste_files (id, paste_id, r2_key, filename, mime_type, size_bytes, created_at)
@@ -358,7 +361,7 @@ export async function handleCompleteUpload(request: Request, env: Env): Promise<
         pasteId,
         f.r2Key,
         f.filename,
-        f.mimeType || 'application/octet-stream',
+        finalMime,
         f.sizeBytes,
         nowIso
       )

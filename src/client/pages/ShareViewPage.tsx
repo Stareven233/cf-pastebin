@@ -222,7 +222,7 @@ export function ShareViewPage() {
                     <AudioPlayer
                       filename={f.filename}
                       sizeBytes={f.sizeBytes}
-                      audioSrc={`${f.downloadUrl}?inline=1`}
+                      audioSrc={`${f.downloadUrl}${f.downloadUrl.includes('?') ? '&' : '?'}inline=1`}
                       downloadUrl={f.downloadUrl}
                     />
                   </Show>

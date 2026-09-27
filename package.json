@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build:client": "vite build",
-    "build:worker": "esbuild src/worker/index.ts --bundle --target=es2022 --format=esm --outfile=dist-worker/index.js --external:cloudflare:*",
+    "build:worker": "esbuild src/worker/index.ts --bundle --target=es2022 --format=esm --outfile=dist-worker/index.js \"--external:cloudflare:*\"",
     "build": "bun run build:client",
     "deploy": "wrangler deploy",
     "preview": "wrangler dev",

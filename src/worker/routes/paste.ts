@@ -5,6 +5,7 @@
 import { isCircuitBroken } from '../metrics';
 import { deletePastePermanently } from '../cron';
 import { verifyAdminSession, signReadToken } from '../auth';
+import { getMimeType, isAudioFile } from '../../shared/mime';
 import type { Env } from '../db';
 import type { ApiResponse, PublicPasteView } from '../../shared/types';
 
@@ -129,8 +130,8 @@ export async function handleGetPaste(
 
   // 7. 组装文件下载与流媒体链接 (带上 read_token 或 admin_preview 授权标记)
   const files = (filesRows.results || []).map(f => {
-    const isAudio = f.mime_type.startsWith('audio/') ||
-      /\.(mp3|wav|ogg|flac|m4a|aac|opus|webm)$/i.test(f.filename);
+    const resolvedMime = getMimeType(f.filename, f.mime_type);
+    const isAudio = isAudioFile(f.filename, resolvedMime);
 
     let downloadUrl = `/d/${paste.slug}/${f.id}`;
     if (isAuthorizedAdminPreview) {
@@ -142,7 +143,7 @@ export async function handleGetPaste(
     return {
       id: f.id,
       filename: f.filename,
-      mimeType: f.mime_type,
+      mimeType: resolvedMime,
       sizeBytes: f.size_bytes,
       downloadUrl,
       isAudio,

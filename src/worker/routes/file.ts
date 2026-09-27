@@ -5,6 +5,7 @@
 import { incrementMetric, isCircuitBroken } from '../metrics';
 import { deletePastePermanently } from '../cron';
 import { verifyAdminSession, verifyReadToken } from '../auth';
+import { getMimeType } from '../../shared/mime';
 import type { Env } from '../db';
 
 /**
@@ -125,8 +126,24 @@ export async function handleDownloadFile(
     return new Response('404 未找到对应的关联文件', { status: 404 });
   }
 
-  // 6. 从 R2 提取对象
-  const r2Object = await env.R2.get(fileRecord.r2_key);
+  // 6. 从 R2 提取对象 (支持 HTTP Range 请求，以满足音频在线拖拽与 Safari/iOS 播放器标准规范)
+  const rangeHeader = request.headers.get('range');
+  let r2Object: R2ObjectBody | null = null;
+
+  if (rangeHeader) {
+    try {
+      r2Object = (await env.R2.get(fileRecord.r2_key, {
+        range: request.headers,
+      })) as R2ObjectBody | null;
+    } catch (err) {
+      console.warn('R2 range fetch failed, fallback to full object:', err);
+    }
+  }
+
+  if (!r2Object) {
+    r2Object = (await env.R2.get(fileRecord.r2_key)) as R2ObjectBody | null;
+  }
+
   if (!r2Object) {
     return new Response('404 存储对象不存在或已被清理', { status: 404 });
   }
@@ -135,12 +152,14 @@ export async function handleDownloadFile(
   await incrementMetric(env.DB, 'r2_class_b_month', 1);
 
   // 7. 累加下载计数与阅后即焚销毁处理 (非特权预览时)
-  if (!isAuthorizedAdminPreview) {
+  // 关键决策：内联试听或代码高亮预览 (isInline === 1) 仅为页面内展示，不可作为实际下载计数，
+  // 更绝不能提前触发阅后即焚物理销毁，否则音频分片加载或多次播放就会导致后续请求 404！
+  if (!isAuthorizedAdminPreview && !isInline) {
     await env.DB.prepare(`
       UPDATE pastes SET download_count = download_count + 1 WHERE id = ?;
     `).bind(paste.id).run();
 
-    // 如果设置了阅后即焚，本次下载后异步彻底清理 R2 和 D1 数据
+    // 如果设置了阅后即焚，真实下载后异步彻底清理 R2 和 D1 数据
     if (paste.burn_after_read === 1) {
       if (ctx) {
         ctx.waitUntil(deletePastePermanently(env.DB, env.R2, paste.id));
@@ -150,23 +169,21 @@ export async function handleDownloadFile(
     }
   }
 
-  // 8. 构造下载/播放响应头
+  // 8. 构造下载/播放响应头与智能 MIME 校准
   const headers = new Headers();
   r2Object.writeHttpMetadata(headers);
-  if (fileRecord.mime_type) {
-    let contentType = fileRecord.mime_type;
-    // 若为内联预览且属于纯文本/代码，确保携带 UTF-8 编码，避免中文注释乱码
-    if (isInline && (contentType === 'application/octet-stream' || contentType.startsWith('text/') || contentType.includes('javascript') || contentType.includes('json'))) {
-      if (!contentType.includes('charset')) {
-        contentType = `${contentType}; charset=utf-8`;
-      }
+
+  // 智能推导 MIME：若数据库中记录为 generic 的 application/octet-stream，根据文件扩展名强制校准为正规音频/媒体类型
+  const resolvedMime = getMimeType(fileRecord.filename, fileRecord.mime_type);
+  let contentType = resolvedMime;
+  if (isInline && (contentType.startsWith('text/') || contentType.includes('javascript') || contentType.includes('json'))) {
+    if (!contentType.includes('charset')) {
+      contentType = `${contentType}; charset=utf-8`;
     }
-    headers.set('Content-Type', contentType);
-  } else if (isInline) {
-    headers.set('Content-Type', 'text/plain; charset=utf-8');
   }
+  headers.set('Content-Type', contentType);
   headers.set('etag', r2Object.httpEtag);
-  headers.set('Content-Length', String(fileRecord.size_bytes));
+  headers.set('Accept-Ranges', 'bytes');
 
   const encodedFilename = encodeURIComponent(fileRecord.filename);
   const dispositionType = isInline ? 'inline' : 'attachment';
@@ -178,5 +195,34 @@ export async function handleDownloadFile(
     headers.set('Cache-Control', 'public, max-age=3600');
   }
 
-  return new Response(r2Object.body, { headers });
+  // 9. 处理 HTTP 206 Partial Content 分片返回
+  if (r2Object.range) {
+    const totalSize = fileRecord.size_bytes || r2Object.size;
+    let offset = 0;
+    let length = totalSize;
+
+    if ('suffix' in r2Object.range) {
+      offset = Math.max(0, totalSize - r2Object.range.suffix);
+      length = r2Object.range.suffix;
+    } else {
+      offset = r2Object.range.offset ?? 0;
+      length = r2Object.range.length ?? Math.max(0, totalSize - offset);
+    }
+
+    const end = Math.min(offset + length - 1, totalSize - 1);
+    headers.set('Content-Range', `bytes ${offset}-${end}/${totalSize}`);
+    headers.set('Content-Length', String(length));
+
+    return new Response(r2Object.body, {
+      status: 206,
+      statusText: 'Partial Content',
+      headers,
+    });
+  }
+
+  headers.set('Content-Length', String(fileRecord.size_bytes || r2Object.size));
+  return new Response(r2Object.body, {
+    status: 200,
+    headers,
+  });
 }

@@ -22,6 +22,8 @@ export function AudioPlayer(props: AudioPlayerProps) {
   const [volume, setVolume] = createSignal(1);
   const [isMuted, setIsMuted] = createSignal(false);
   const [isLoaded, setIsLoaded] = createSignal(false);
+  const [hasError, setHasError] = createSignal(false);
+  const [errorMessage, setErrorMessage] = createSignal('');
 
   const formatSeconds = (sec: number) => {
     if (isNaN(sec) || !isFinite(sec)) return '00:00';
@@ -37,7 +39,14 @@ export function AudioPlayer(props: AudioPlayerProps) {
     } else {
       audioElement.play().catch(err => {
         console.error('Audio play failed:', err);
-        showToast('无法自动播放，请点击允许媒体播放', 'warning');
+        const errCode = audioElement?.error?.code;
+        if (errCode === 4 || err.name === 'NotSupportedError') {
+          showToast('此音频格式暂不受当前浏览器直接解码支持，请点击下载至本地播放喵', 'warning');
+        } else if (errCode === 2) {
+          showToast('音频网络流传输异常，请刷新重试或直接下载喵', 'warning');
+        } else {
+          showToast('无法播放音频，建议点击右上角直接下载试听喵', 'warning');
+        }
       });
     }
   };
@@ -105,11 +114,24 @@ export function AudioPlayer(props: AudioPlayerProps) {
         ref={audioElement}
         src={props.audioSrc}
         preload="metadata"
-        onPlay={() => setIsPlaying(true)}
+        onPlay={() => {
+          setIsPlaying(true);
+          setHasError(false);
+        }}
         onPause={() => setIsPlaying(false)}
         onEnded={() => setIsPlaying(false)}
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
+        onError={() => {
+          setHasError(true);
+          const err = audioElement?.error;
+          console.error('Audio element error:', err);
+          if (err?.code === 4) {
+            setErrorMessage('当前浏览器无法直接解码此音频格式喵');
+          } else {
+            setErrorMessage('音频加载异常喵');
+          }
+        }}
       />
 
       {/* 音频信息头部 */}
@@ -198,7 +220,7 @@ export function AudioPlayer(props: AudioPlayerProps) {
               </Show>
             </button>
             <span class="text-xs font-medium text-slate-600">
-              {isPlaying() ? '播放中...' : '点击试听'}
+              {hasError() ? (errorMessage() || '解码受阻，可直接下载') : (isPlaying() ? '播放中...' : '点击试听')}
             </span>
           </div>
 

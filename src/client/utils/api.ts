@@ -3,6 +3,7 @@
  */
 
 import type { ApiResponse, PublicPasteView, QuotaOverview, AdminPasteListItem, UploadToken } from '../../shared/types';
+import { getMimeType } from '../../shared/mime';
 
 /**
  * 封装通用 Fetch 请求
@@ -56,7 +57,8 @@ export function uploadFileWithProgress(
     const url = `/api/upload/direct?filename=${encodedName}&size=${file.size}${tokenQuery}`;
 
     xhr.open('POST', url, true);
-    xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+    const resolvedMime = getMimeType(file.name, file.type);
+    xhr.setRequestHeader('Content-Type', resolvedMime || 'application/octet-stream');
 
     // 监听原生上传进度
     xhr.upload.onprogress = (event) => {
