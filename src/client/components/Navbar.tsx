@@ -3,18 +3,13 @@
  */
 
 import { createSignal, onMount, Show } from 'solid-js';
-import { A, useNavigate } from '@solidjs/router';
+import { A } from '@solidjs/router';
 import { apiAdminMe } from '../utils/api';
-import { showToast } from './Toast';
 import { ADMIN_PATH } from '../config';
 
 export function Navbar() {
-  const navigate = useNavigate();
   // 当前是否为管理员已登录状态
   const [isAdmin, setIsAdmin] = createSignal(false);
-  // Logo 点击连击计数 (用于彩蛋唤出后台入口)
-  let logoClickCount = 0;
-  let logoClickTimer: any = null;
 
   // 挂载时动态探测管理员登录态
   onMount(async () => {
@@ -28,30 +23,12 @@ export function Navbar() {
     }
   });
 
-  // 连续点击 Logo 5 次彩蛋：快速唤出管理后台登录入口
-  const handleLogoClick = (e: MouseEvent) => {
-    logoClickCount++;
-    if (logoClickTimer) clearTimeout(logoClickTimer);
-
-    logoClickTimer = setTimeout(() => {
-      logoClickCount = 0;
-    }, 2000);
-
-    if (logoClickCount >= 5) {
-      logoClickCount = 0;
-      clearTimeout(logoClickTimer);
-      showToast('已唤出管理员安全入口喵~', 'info');
-      navigate(ADMIN_PATH);
-    }
-  };
-
   return (
     <header class="sticky top-0 z-40 w-full backdrop-blur-md bg-white/80 border-b border-emerald-100/60 shadow-xs transition-all">
       <div class="max-w-6xl mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
-        {/* Logo 区域：支持点击 5 次唤出隐藏入口 */}
+        {/* Logo 区域 */}
         <A
           href="/"
-          onClick={handleLogoClick}
           class="flex items-center gap-2 sm:gap-3 group focus:outline-hidden select-none"
         >
           <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-emerald-400 flex items-center justify-center text-white shadow-md shadow-emerald-500/20 group-hover:scale-105 transition-transform shrink-0">
@@ -96,4 +73,3 @@ export function Navbar() {
     </header>
   );
 }
-
