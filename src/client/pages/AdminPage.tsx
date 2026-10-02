@@ -61,7 +61,7 @@ export function AdminPage() {
   const [isLoadingTokens, setIsLoadingTokens] = createSignal(false);
 
   // 新建 Token 表单
-  const [newTokenQuotaMB, setNewTokenQuotaMB] = createSignal(50);
+  const [newTokenQuotaMB, setNewTokenQuotaMB] = createSignal(25);
   const [newTokenHours, setNewTokenHours] = createSignal(24);
   const [newTokenAllowPermanent, setNewTokenAllowPermanent] = createSignal(false);
   const [createdTokenUrl, setCreatedTokenUrl] = createSignal<string | null>(null);

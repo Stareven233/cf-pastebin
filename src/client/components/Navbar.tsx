@@ -27,25 +27,30 @@ export function Navbar() {
     <header class="sticky top-0 z-40 w-full backdrop-blur-md bg-white/80 border-b border-emerald-100/60 shadow-xs transition-all">
       <div class="max-w-6xl mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
         {/* Logo 区域 */}
-        <A
-          href="/"
-          class="flex items-center gap-2 sm:gap-3 group focus:outline-hidden select-none"
-        >
-          <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-emerald-400 flex items-center justify-center text-white shadow-md shadow-emerald-500/20 group-hover:scale-105 transition-transform shrink-0">
-            <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-              <rect x="8" y="2" width="8" height="4" rx="1" ry="1" stroke-width="2.2" />
-            </svg>
-          </div>
-          <div class="flex items-center">
+        <div class="flex items-center">
+          <A
+            href="/"
+            class="flex items-center gap-2 sm:gap-3 group focus:outline-hidden select-none"
+          >
+            <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-emerald-400 flex items-center justify-center text-white shadow-md shadow-emerald-500/20 group-hover:scale-105 transition-transform shrink-0">
+              <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+                <rect x="8" y="2" width="8" height="4" rx="1" ry="1" stroke-width="2.2" />
+              </svg>
+            </div>
             <span class="text-base sm:text-lg font-bold bg-gradient-to-r from-emerald-800 to-emerald-600 bg-clip-text text-transparent">
               CF Pastebin
             </span>
+          </A>
+          <A
+            href="https://github.com/Stareven233/cf-pastebin"
+            class="flex items-center gap-2 sm:gap-3 group focus:outline-hidden select-none"
+          >
             <span class="hidden md:inline-block ml-2 text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/50 font-medium">
-              Private & Ephemeral
+              Github
             </span>
-          </div>
-        </A>
+          </A>
+        </div>
 
         {/* 右侧导航操作：移动端紧凑适配与动态入口展示 */}
         <div class="flex items-center gap-1.5 sm:gap-3">

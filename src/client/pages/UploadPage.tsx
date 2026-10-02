@@ -219,11 +219,10 @@ export function UploadPage() {
       {/* 标题说明区 */}
       <div class="text-center mb-8">
         <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight sm:text-4xl">
-          私密分享与文件暂存
+          文本/文件分享
         </h1>
         <p class="mt-2 text-xs sm:text-sm text-slate-500 max-w-lg mx-auto">
-          pastebin由"paste"（粘贴）和"bin"（容器）组合而来，允许用户将任意文本/代码/文件上传到服务器，保存内容并生成唯一链接，获得该链接的人可以在浏览器中查看完整内容，无需注册账号
-          支持单文件 25MB 内音频/附件与纯文本、用完即焚喵
+          支持单文件 25MB 内音频/附件与纯文本上传、可选用完即焚喵
         </p>
       </div>
 

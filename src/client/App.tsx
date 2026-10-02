@@ -3,6 +3,7 @@
  */
 
 import { Router, Route } from '@solidjs/router';
+import { A } from '@solidjs/router';
 import type { RouteSectionProps } from '@solidjs/router';
 import { Navbar } from './components/Navbar';
 import { ToastContainer } from './components/Toast';
@@ -26,15 +27,11 @@ function RootLayout(props: RouteSectionProps) {
       </main>
 
       {/* 极简清新页脚 */}
-      <footer class="border-t border-emerald-100/60 bg-white/50 backdrop-blur-xs py-6 text-center text-xs text-slate-400">
-        <div class="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p class="font-medium text-slate-500">
-            Pastebin
-          </p>
-          <p class="flex items-center gap-2">
-            私密分享 • 阅后即焚 • 自动清理
-          </p>
-        </div>
+      <footer class="flex flex-row items-baseline max-w-7xl mx-auto border-t border-emerald-100/60 bg-white/50 backdrop-blur-xs py-4 text-center text-xs text-slate-400">
+        <p class="px-2 flex flex-col sm:flex-row font-medium text-slate-500">
+            pastebin由"paste"（粘贴）和"bin"（容器）组合而来，允许用户将任意文本/代码/文件上传到服务器，保存内容并生成唯一链接，获得该链接的人可以在浏览器中查看完整内容，无需注册账号
+        </p>
+        <span class='bg-emerald-50 text-emerald-700 hover:bg-emerald-200 rounded-md  border-emerald-200/50 font-medium p-1'><A href='https://space.bilibili.com/1610042298'>@獭栖八雫</A></span>
       </footer>
 
       {/* 全局消息提示容器 */}
