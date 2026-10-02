@@ -49,7 +49,8 @@ export default defineConfig(({ mode }) => {
     },
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, './src'),
+        // 使用现代 ES 标准 import.meta.dirname 替代 __dirname，完全消除 Vite 8 警告
+        '@': path.resolve(import.meta.dirname, './src'),
       },
     },
     server: {

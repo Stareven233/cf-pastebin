@@ -29,12 +29,10 @@ function RootLayout(props: RouteSectionProps) {
       <footer class="border-t border-emerald-100/60 bg-white/50 backdrop-blur-xs py-6 text-center text-xs text-slate-400">
         <div class="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p class="font-medium text-slate-500">
-            CF Pastebin • 零成本私密资源分享系统
+            Pastebin
           </p>
           <p class="flex items-center gap-2">
-            <span>运行于 Cloudflare 免费配额层</span>
-            <span>•</span>
-            <span class="text-emerald-700 font-semibold">阅后即焚 & 自动物理清理</span>
+            私密分享 • 阅后即焚 • 自动清理
           </p>
         </div>
       </footer>

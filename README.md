@@ -37,6 +37,7 @@
 | 模块 | 技术方案 | 说明 |
 | :--- | :--- | :--- |
 | **包管理 / 运行** | [Bun](https://bun.sh/) | 超高速 JavaScript/TypeScript 运行时与依赖管理 |
+| **构建工具** | [Vite](https://vite.dev/) | 下一代极速前端构建工具与毫秒级 HMR 开发服务器 |
 | **前端框架** | [SolidJS](https://www.solidjs.com/) | 极致性能的细粒度响应式前端框架 |
 | **路由系统** | [@solidjs/router](https://github.com/solidjs/solid-router) | 声明式轻量单页路由 |
 | **CSS 样式** | [TailwindCSS](https://tailwindcss.com/) | 原子化样式与现代化渐变卡片视觉设计 |
@@ -83,16 +84,41 @@ SESSION_SECRET=cf-pastebin-super-secure-session-key-change-me
 ENVIRONMENT=development
 ```
 
-### 3. 运行本地开发与仿真服务
+### 3. 运行本地开发与调试
+
+项目支持**毫秒级细粒度前端热重载（HMR）**与 **Cloudflare 边缘全仿真**两种模式：
+
+#### 方案 A：🔥 极速双轨热重载开发（推荐，修改代码无需重新 build）
+
+基于 Vite 8 的细粒度 HMR 联动 Wrangler 边缘服务代理，修改前端或样式代码毫秒级即时生效：
+
+1. **终端 1 启动后端与存储仿真**（运行于 `http://127.0.0.1:8787`）：
+```bash
+bun run preview # 即 bun x wrangler dev
+```
+*本地模拟 D1 数据库、R2 对象存储与 Worker 接口；修改 `src/worker/*` 后端逻辑时将自动热重载。*
+
+2. **终端 2 启动前端热重载开发服务器**（运行于 `http://localhost:3000`）：
+```bash
+bun run dev
+```
+*由 Vite 8 + SolidJS 驱动，提供细粒度毫秒级 HMR。*
+
+3. **浏览器访问 `http://localhost:3000` 即可开始开发**：
+- 修改前端组件与样式无需等待构建、无需刷新页面，实时局部热替换；
+- 前端发起的 `/api/*` 和 `/d/*` 请求会被 Vite Proxy 自动代理转发至本地 `8787` 端口的 Worker。
+
+#### 方案 B：📦 生产打包与边缘全真模拟预览
+
+在发布上线前，完全模拟 Cloudflare Workers Static Assets 托管机制：
 
 ```bash
-# 构建前端静态产物
+# 1. 编译前端生产静态产物至 dist/ 目录
 bun run build:client
 
-# 启动 Worker 边缘仿真（自动模拟 D1、R2 与静态资源托管）
-bun x wrangler dev
+# 2. 启动 Worker 边缘仿真（直接托管 dist/ 静态产物与 D1、R2 绑定）
+bun run preview
 ```
-
 访问终端输出的本地地址（通常为 `http://localhost:8787`）。
 
 ---

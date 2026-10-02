@@ -222,7 +222,8 @@ export function UploadPage() {
           私密分享与文件暂存
         </h1>
         <p class="mt-2 text-xs sm:text-sm text-slate-500 max-w-lg mx-auto">
-          基于 Cloudflare 边缘计算与 R2 对象存储，支持单文件 25MB 内音频/附件与纯文本，安全合规、用完即焚喵
+          pastebin由"paste"（粘贴）和"bin"（容器）组合而来，允许用户将任意文本/代码/文件上传到服务器，保存内容并生成唯一链接，获得该链接的人可以在浏览器中查看完整内容，无需注册账号
+          支持单文件 25MB 内音频/附件与纯文本、用完即焚喵
         </p>
       </div>
 
@@ -236,7 +237,7 @@ export function UploadPage() {
           </div>
           <h3 class="text-lg font-bold text-slate-800 mb-2">需要专属上传凭证</h3>
           <p class="text-xs text-slate-500 mb-6">
-            本站仅面向站长自身与获授权的少数好友。请使用管理员派发给您的专属上传链接，或在下方输入 Token 密钥喵~
+            请通过专属上传链接进入，或在下方输入 Token 密钥喵~
           </p>
 
           <Show when={tokenError()}>
