@@ -57,12 +57,17 @@ cd cf-pastebin
 bun install
 ```
 
-### 2. 配置本地仿真环境变量
+### 2. 配置本地仿真环境变量与前端配置
 
-项目已提供环境变量示例模板 `.dev.vars.example`（由于 `.dev.vars` 包含敏感密钥，已在 `.gitignore` 中默认忽略）。首次开发请复制生成本地环境变量配置文件：
+项目已提供环境变量示例模板：
+- `.dev.vars.example`：Worker 本地开发密钥配置（由于包含敏感信息，已在 `.gitignore` 中默认忽略）；
+- `.env.example`：前端构建配置（包含管理后台自定义安全路径，若未配置初次构建将自动生成随机路径）。
+
+首次开发可复制模板生成本地配置文件：
 
 ```bash
 cp .dev.vars.example .dev.vars
+cp .env.example .env # 可选：若未创建，首次构建时系统将全自动生成随机安全路径
 ```
 
 `.dev.vars` 默认内容如下（开箱即用，可根据需要调整）：
@@ -134,10 +139,13 @@ bun x wrangler r2 bucket create cf-pastebin-bucket
 ```bash
 # 设置后台管理面板登录密码 (请务必使用强密码)
 bun x wrangler secret put ADMIN_PASSWORD
+# There doesn't seem to be a Worker called "cf-pastebin". Do you want to create a new Worker with that name and add secrets to it? ... yes
 
 # 设置会话签名私钥 (任意 32 位以上随机安全字符串)
 bun x wrangler secret put SESSION_SECRET
 ```
+
+注：上述两条命令执行后才是输入密码/私钥的时候，.dev.vars仅本地开发用
 
 ### 4. 构建并一键发布至边缘网络
 
@@ -180,17 +188,47 @@ bun x wrangler deploy
   ```
   保存后重新执行一次 `bun x wrangler deploy` 即可完成部署与域名绑定。
 
+### 6. 后续迭代与边缘网络更新指南
+
+服务发布至 Cloudflare 全球边缘网络后，日常开发维护与更新升级流程非常轻量快捷：
+
+#### A. 页面与业务代码更新 (热更新)
+在本地修改了前端组件、Worker 路由或样式逻辑后，仅需重新构建并发布：
+```bash
+# 1. 重新构建前端静态产物 (输出至 ./dist)
+bun run build:client
+
+# 2. 一键发布更新至全球 300+ 边缘节点
+bun x wrangler deploy
+```
+* **秒级全网同步（Zero Downtime）**：Cloudflare Workers 采用原子化（Atomic）即时发布机制，耗时仅 1~3 秒即可全网生效，无停机维护窗口；
+* **静态缓存自动刷新**：Vite 产物自带内容指纹哈希（Content Hash），客户端与 CDN 边缘缓存会自动拉取最新资源，无需手动刷新缓存。
+
+#### B. 数据库表结构变更 (D1 Migrations)
+若后续版本有表结构迭代或需要执行补充 SQL，直接通过命令行向云端执行即可：
+```bash
+bun x wrangler d1 execute cf_pastebin_db --remote --file=./update.sql
+```
+
+#### C. 管理员密码与密钥更新
+* **修改后台密码 / 私钥**：直接再次执行 `bun x wrangler secret put ADMIN_PASSWORD`，云端即刻生效，无需重新执行 `deploy`；
+* **更换管理后台入口路径**：修改 `.env` 中的 `VITE_ADMIN_PATH` 路径值，重新执行 `bun run build:client && bun x wrangler deploy` 即可。
+
 ---
 
 ## 🛡️ 管理员后台与安全防护
 
-### 1. 访问管理后台
+### 1. 访问管理后台 (高隐蔽性自定义入口)
 
-为了防止前台直接暴露管理面板引来恶意扫描与探测，系统设计了隐蔽与动态入口：
+为彻底杜绝公网扫描机器人与自动化爬虫对 `/admin`、`/wp-admin` 等常见敏感路径的爆破探测，系统摒弃了固定硬编码路径，提供**完全可配置、高隐蔽性的安全入口机制**：
 
-- **直接访问**：在浏览器地址栏直接输入 `/admin` 路径（例如 `https://paste.yourdomain.com/admin`）；
-- **前端彩蛋快捷唤出**：在网站顶部导航栏，**连续快速点击 Logo 图标 5 次**（2 秒内），页面将弹出提示并自动跳转进入 `/admin` 登录界面；
-- **登录后动态常驻**：管理员成功登录后，系统会自动保存会话，此时顶部导航栏右侧将动态常驻显示「后台管理」盾牌入口。
+- **自定义与随机默认路径**：
+  - 支持在本地 `.env` 文件中通过 `VITE_ADMIN_PATH` 自定义任意安全路径（如 `VITE_ADMIN_PATH=/my_secret_mgr`）；
+  - 若初次构建时未指定，构建系统将**全自动生成 8 位不可预测的随机哈希路径**（形如 `/adm_c4a70d33`）并持久化保存至 `.env`；
+  - 任何针对公网常见 `/admin` 路径的恶意探测均会直接返回标准 404 页面，完全隐藏管理后台的存在；
+- **终端智能提示**：每次执行 `bun run build:client` 或 `bun run dev` 时，控制台均会以高亮绿色打印当前生效的安全入口完整路径；
+- **前端彩蛋快捷唤出**：在网站顶部导航栏，**连续快速点击 Logo 图标 5 次**（2 秒内），页面将提示并自动跳转进入主人专属的安全管理后台；
+- **登录后动态常驻**：管理员成功登录后，顶部导航栏右侧将动态常驻显示「后台管理」盾牌入口，直通后台。
 
 ### 2. 多重安全防护体系
 

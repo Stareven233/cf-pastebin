@@ -1,41 +1,41 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "cf-pastebin",
-  "main": "src/worker/index.ts",
-  "compatibility_date": "2024-09-23",
-  "compatibility_flags": [
-    "nodejs_compat"
-  ],
-  // 前端单页应用静态资产绑定 (Cloudflare Workers with Static Assets)
-  "assets": {
-    "directory": "./dist",
-    "binding": "ASSETS",
-    "not_found_handling": "single-page-application"
-  },
-  // Cloudflare D1 关系型数据库绑定 (用于元数据、Token与指标)
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "cf_pastebin_db",
-      "database_id": "cf_pastebin_db_id"
-    }
-  ],
-  // Cloudflare R2 对象存储桶绑定 (用于音频与大文件存储)
-  "r2_buckets": [
-    {
-      "binding": "R2",
-      "bucket_name": "cf-pastebin-bucket"
-    }
-  ],
-  // 定时任务调度器：每小时执行一次过期文件清理与指标同步
-  "triggers": {
-    "crons": [
-      "0 * * * *"
-    ]
-  },
-  // 环境变量默认值（生产环境密码请通过 wrangler secret put ADMIN_PASSWORD 注入）
-  "vars": {
-    "ENVIRONMENT": "production",
-    "MAX_FILE_SIZE_BYTES": "26214400" // 单文件最大 25MB (25 * 1024 * 1024)
-  }
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "cf-pastebin",
+	"main": "src/worker/index.ts",
+	"compatibility_date": "2024-09-23",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	// 前端单页应用静态资产绑定 (Cloudflare Workers with Static Assets)
+	"assets": {
+		"directory": "./dist",
+		"binding": "ASSETS",
+		"not_found_handling": "single-page-application"
+	},
+	// Cloudflare D1 关系型数据库绑定 (用于元数据、Token与指标)
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "cf_pastebin_db",
+			"database_id": "8249aff2-f22c-4f32-9424-9fe9368f46bd"
+		}
+	],
+	// Cloudflare R2 对象存储桶绑定 (用于音频与大文件存储)
+	"r2_buckets": [
+		{
+			"binding": "R2",
+			"bucket_name": "cf-pastebin-bucket"
+		}
+	],
+	// 定时任务调度器：每小时执行一次过期文件清理与指标同步
+	"triggers": {
+		"crons": [
+			"0 * * * *"
+		]
+	},
+	// 环境变量默认值（生产环境密码请通过 wrangler secret put ADMIN_PASSWORD 注入）
+	"vars": {
+		"ENVIRONMENT": "production",
+		"MAX_FILE_SIZE_BYTES": "26214400" // 单文件最大 25MB (25 * 1024 * 1024)
+	}
 }

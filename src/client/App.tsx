@@ -10,6 +10,7 @@ import { UploadPage } from './pages/UploadPage';
 import { ShareViewPage } from './pages/ShareViewPage';
 import { AdminPage } from './pages/AdminPage';
 import { NotFoundPage } from './pages/NotFoundPage';
+import { ADMIN_PATH } from './config';
 
 /**
  * 全局应用顶层布局组件
@@ -50,7 +51,7 @@ export function App() {
       <Route path="/" component={UploadPage} />
       <Route path="/upload" component={UploadPage} />
       <Route path="/s/:slug" component={ShareViewPage} />
-      <Route path="/admin" component={AdminPage} />
+      <Route path={ADMIN_PATH} component={AdminPage} />
       <Route path="*404" component={NotFoundPage} />
     </Router>
   );

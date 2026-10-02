@@ -6,6 +6,7 @@ import { createSignal, onMount, Show } from 'solid-js';
 import { A, useNavigate } from '@solidjs/router';
 import { apiAdminMe } from '../utils/api';
 import { showToast } from './Toast';
+import { ADMIN_PATH } from '../config';
 
 export function Navbar() {
   const navigate = useNavigate();
@@ -40,7 +41,7 @@ export function Navbar() {
       logoClickCount = 0;
       clearTimeout(logoClickTimer);
       showToast('已唤出管理员安全入口喵~', 'info');
-      navigate('/admin');
+      navigate(ADMIN_PATH);
     }
   };
 
@@ -81,7 +82,7 @@ export function Navbar() {
           {/* 仅在当前用户已登录管理员时，才在前台动态呈现管理入口，防止被恶意探测爆破 */}
           <Show when={isAdmin()}>
             <A
-              href="/admin"
+              href={ADMIN_PATH}
               class="flex items-center gap-1 text-xs sm:text-sm font-semibold text-emerald-800 bg-emerald-100/80 hover:bg-emerald-200/80 px-2.5 sm:px-3.5 py-1.5 rounded-xl transition-all shadow-xs border border-emerald-200/60"
             >
               <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
